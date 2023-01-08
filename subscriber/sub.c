@@ -1,9 +1,11 @@
 #include "logging.h"
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    fprintf(stderr, "usage: sub <register_pipe_name> <box_name>\n");
-    WARN("unimplemented"); // TODO: implement
+
+    if(argc == 4){
+
+    }
+    
+    fprintf(stderr, "usage: sub <register_pipe_name> <pipe_name> <box_name>\n");
     return -1;
 }
