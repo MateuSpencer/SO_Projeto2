@@ -16,12 +16,12 @@ int main(int argc, char **argv) {
     }else if(argc == 4){
         if(strcmp(argv[2],"create")){
 
-
+        //mandar pedido para criar uma caixa
 
             return 0;
         }else if(strcmp(argv[2],"remove")){
             
-
+            //mandar pedido para iniciar sessao e apagar uma caixa
 
             return 0;
         }
