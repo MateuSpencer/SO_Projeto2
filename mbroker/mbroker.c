@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 
 #include "logging.h"
+#include "commons/protocol.h"
 #include "producer-consumer.h"
 
 int main(int argc, char **argv) {
@@ -16,13 +17,11 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[1], strerror(errno));
             exit(EXIT_FAILURE);
         }
-
         //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
         if (mkfifo(argv[1], S_IRUSR | S_IWOTH) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(argv[1], O_RDONLY);
         if (register_fifo_read == -1){
@@ -34,6 +33,33 @@ int main(int argc, char **argv) {
             //lançar As threads todas? - Começar so com uma
         }*/
         
+        char buffer[sizeof(RequestMessage)];
+        ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
+        if (bytes_read < 0) {
+            // ret == -1 indicates error
+            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }else if(bytes_read == 0){//EOF?? - pipe closed?
+            
+            
+        }
+
+
+        RequestMessage message;
+        sscanf(buffer, "%u%s%s", &message.code, message.client_named_pipe_path, message.box_name);
+
+        switch (message.code){
+            case 1: //Received request for publisher registration
+                
+                break;
+            case 2: //Received request for subscriber registration
+                break;
+            case 3: //Received request for box creation
+                break;
+            default:
+                printf("Received unknown message with code %u\n", message.code);
+                break;
+        }
 
         //loop que retira mensagens do registerfifo e as processa - No futuro será a fila producer consumer
             //chama função para processar mensagem e essa função depois mand iso para uma thread?
@@ -53,8 +79,8 @@ int main(int argc, char **argv) {
     
             //O servidor envia mensagens para o subscritor do tipo:[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
     
-    
-    
+        close(register_fifo_read);
+        return 0;
     }
     fprintf(stderr, "usage: mbroker <register_pipe_name> <max_sessions>\n");
     return -1;
