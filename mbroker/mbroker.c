@@ -11,28 +11,24 @@
 int main(int argc, char **argv) {
     if(argc == 3){
 
-    
-    
-        // Remove pipe if it does not exist
+        //Remover pipe se ja existir
         if (unlink(argv[1]) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[1],
-                strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+            fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[1], strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
-    //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others)
-    if (mkfifo(argv[1], S_IRUSR | S_IWOTH) != 0) {
-        fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+        //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
+        if (mkfifo(argv[1], S_IRUSR | S_IWOTH) != 0) {
+            fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
-    // Open pipe for writing
-    // This waits for someone to open it for reading
-    int tx = open(argv[1], O_WRONLY);
-    if (tx == -1) {
-        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+        // Open pipe for reading (waits for someone to open it for writing)
+        int register_fifo_read = open(argv[1], O_RDONLY);
+        if (register_fifo_read == -1){
+            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
         /*for(int thread = 0; thread < argv[2]; thread++){
             //lançar As threads todas? - Começar so com uma

@@ -1,9 +1,22 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 #include "logging.h"
 
 int main(int argc, char **argv) {
     int msgCtr = 0;
 
     if(argc == 4){
+
+        int register_fifo_write = open(argv[1], O_WRONLY);
+        if (register_fifo_write == -1){
+            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
         //enviar pelo argv[1] (resgiter pipe) um pedido para se subscrever à caixa argv[3], e dar o nome do fifo entre a thred e este processo argv[2]
             //[ code = 2 (uint8_t) ] | [ client_named_pipe_path (char[256]) ] | [ box_name (char[32]) ]
