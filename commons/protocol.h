@@ -9,8 +9,10 @@ typedef struct {
     char box_name[32];
 } RequestMessage;
 
-//para espostas
+//para respostas
 
 //para listagens de caixas
+
+//maybe criar uma função para serializar respostas e as enviar, e inverso
 
 #endif __protocol__

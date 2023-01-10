@@ -32,18 +32,32 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         //Como saber se foi aceite ou nao?
-        //acho que ja devia ter criado o pipe para falar com a thread, ou so agora?
-
-        //le as mensagens que ja estao na caixa
-
-        //fica a espera  de novas mensagens serem escritas no fifo
-            //nao espera ativa
-            //fprintf(stdout, "%s\n", message);
-
+        //open worker_pipe so that the worker thread can open it for reading
+        int worker_fifo_read = open(argv[1], O_RDONLY);
+        if (register_fifo_write == -1){
+            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        
+        Message message;
+        char worker_buffer[sizeof(Message)];
+        ssize_t bytes_read = read(worker_fifo_read, worker_buffer, sizeof(worker_buffer));
+        while(bytes_read > 0){//will exit once the pipe writer exits
+            //fazer nao espera ativa
+            sscanf(worker_buffer, "%u%s%s", &message.code, message.message);
+            //verificar opcode?
+            fprintf(stdout, "%s\n", message.message);
+            bytes_read = read(worker_fifo_read, buffer, sizeof(buffer));
+        }
+        if (bytes_read < 0){//error
+            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        
         //deve processar o SIGINT
             //fechar sessão
             //escrever numero de mensagens recebidas
-
+        return 0;
     }
     
     fprintf(stderr, "usage: sub <register_pipe_name> <pipe_name> <box_name>\n");
