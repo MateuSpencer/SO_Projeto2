@@ -4,10 +4,14 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #include "logging.h"
 #include "commons/protocol.h"
 #include "producer-consumer.h"
+
+volatile sig_atomic_t stop_workers = 0;
+//volatile sig_atomic_t to make it thread safe
 
 void *worker_thread_func(void *arg);
 
@@ -43,6 +47,13 @@ int main(int argc, char **argv){
                 return 1;
             }
         }
+        // Open pipe for writing in a different process
+        pid_t pid = fork();
+        if (pid == 0) {
+            int register_fifo_ghost_writer = open(argv[1], O_WRONLY);
+            //se o servidor acabar isto devia ser terminado tho. - é tirar este, e assim quando os outros sairem todos o loop abaixo acaba
+            //maybe uma condição de variavel, a depender de apanhar um SIGINT ou assim
+        }
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(argv[1], O_RDONLY);
         if (register_fifo_read == -1){
@@ -64,11 +75,8 @@ int main(int argc, char **argv){
         }
         close(register_fifo_read);
 
-        // Set the flag indicating that no more requests will be added to the queue
-        if (pcq_enqueue(&queue, NULL) != 0) {
-            fprintf(stderr, "Error enqueuing termination request\n");
-            return 1;
-        }
+        //Make the worker threads terminate
+        stop_workers = 1;
         // Wait for the worker threads to complete
         for (int i = 0; i < num_threads; i++) {
             if (pthread_join(worker_threads[i], NULL) != 0) {
@@ -84,6 +92,7 @@ int main(int argc, char **argv){
         free(worker_threads);
         return 0;
     }
+
     fprintf(stderr, "usage: mbroker <register_pipe_name> <max_sessions>\n");
     return -1;
 }
@@ -91,13 +100,9 @@ int main(int argc, char **argv){
 
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
-    while (1) {
+    while (!stop_workers) {
         // Dequeue a request
         char *request = (char*)pcq_dequeue(queue);
-        // Check if the request is the termination request
-        if (request == NULL) {
-            break;
-        }
         // Process the request
         RequestMessage message;
         sscanf(request, "%u%s%s", &message.code, message.client_named_pipe_path, message.box_name);
@@ -106,8 +111,12 @@ void *worker_thread_func(void *arg) {
                 
                 break;
             case 2: //Received request for subscriber registration
+
+
                 break;
             case 3: //Received request for box creation
+
+            
                 break;
             default:
                 printf("Received unknown message with code %u\n", message.code);
