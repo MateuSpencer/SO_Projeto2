@@ -59,10 +59,25 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-
-            //ler resposta do pipe
-            //imprimir resposta
-            //fechar pipes, acabar
+            //ler resposta
+            Message boxResponse;
+            char worker_buffer[sizeof(Message)];
+            ssize_t bytes_read = read(worker_fifo_read, worker_buffer, sizeof(worker_buffer));
+            if (bytes_read < 0){//error
+                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            sscanf(worker_buffer, "%u%d%s", &boxResponse.code, boxResponse.box_response.return_code,boxResponse.box_response.error_message);
+            //verificar opcode?
+            if(boxResponse.box_response.return_code == 0){
+                fprintf(stdout, "OK\n");
+            }else if(boxResponse.box_response.return_code == -1){
+                fprintf(stdout, "ERROR %s\n", boxResponse.box_response.error_message);
+            }else{
+                //resposta desconhecida
+            }
+            close(worker_fifo_read);
+            close(register_fifo_write);
             return 0;
         }
     }

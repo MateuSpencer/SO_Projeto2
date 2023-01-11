@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         //Como saber se foi aceite ou nao?
-        //open worker_pipe so that the worker thread can open it for reading
+        //open worker_pipe so that the worker thread can open it for writing
         int worker_fifo_read = open(argv[1], O_RDONLY);
         if (register_fifo_write == -1){
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
@@ -57,6 +57,8 @@ int main(int argc, char **argv) {
         //deve processar o SIGINT
             //fechar sessão
             //escrever numero de mensagens recebidas
+        close(worker_fifo_read);
+        close(register_fifo_write);
         return 0;
     }
     
