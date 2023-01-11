@@ -108,13 +108,34 @@ void *worker_thread_func(void *arg) {
         sscanf(request, "%u%s%s", &message.code, message.client_named_pipe_path, message.box_name);
         switch (message.code){
             case 1: //Received request for publisher registration
+
+                //recebe estas
+                //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
                 
                 break;
             case 2: //Received request for subscriber registration
+                
+                //le da caixa e envia estas
+                //[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
 
 
                 break;
             case 3: //Received request for box creation
+
+                //Resposta: [ code = 4 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ] 
+
+            
+                break;
+            case 5: //Received request for box removal
+
+                //Resposta: [ code = 6 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ]
+
+            
+                break;
+            case 7: //Received request for box listing
+
+                //Resposta: varias mensagens assim
+                    //[ code = 8 (uint8_t) ] | [ last (uint8_t) ] | [ box_name (char[32]) ] | [ box_size (uint64_t) ] | [ n_publishers (uint64_t) ] | [ n_subscribers (uint64_t) ]
 
             
                 break;
@@ -122,19 +143,6 @@ void *worker_thread_func(void *arg) {
                 printf("Received unknown message with code %u\n", message.code);
                 break;
         }
-
-            //Resposta ao pedido de criação de caixa:[ code = 4 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ]
-                //return ée 0 ou -1
-                    //se for erro envia mensagem de erro, senao inicializa com \0
-            //Resposta ao pedido de remoção de caixa:[ code = 6 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ]
-
-            //A resposta à listagem de caixas vem em várias mensagens, do seguinte tipo:
-                //[ code = 8 (uint8_t) ] | [ last (uint8_t) ] | [ box_name (char[32]) ] | [ box_size (uint64_t) ] | [ n_publishers (uint64_t) ] | [ n_subscribers (uint64_t) ]
-                //last é um se for a ultima da listagem, senao 0
-                //box size é o tamanho em bytes da caixa
-            
-            //O servidor envia mensagens para o subscritor do tipo:[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
-
 
         free(request);
     }
