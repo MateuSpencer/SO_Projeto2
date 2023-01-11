@@ -17,16 +17,17 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        // Create request message
-        Message requestMessage;
-        requestMessage.code = 2;
-        strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
-        strcpy(requestMessage.registration_request.box_name, argv[3]);
-        // Serialize the message into a buffer
-        char buffer[sizeof(Message)];
-        sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
+        // Create request message serialized buffer
+        Request sub_request;
+        sub_request.code = 2;
+        sub_request.client_named_pipe_path[256];
+        sub_request.box_name[32];
+        strcpy(sub_request.client_named_pipe_path, argv[2]);
+        strcpy(sub_request.box_name, argv[3]);
+        char request_buffer[sizeof(Request)];
+        sprintf(request_buffer, "%u%s%s", sub_request.code , sub_request.client_named_pipe_path, sub_request.box_name);
         // Write the serialized message to the FIFO
-        int bytes_written = write(register_fifo_write, buffer, sizeof(buffer));
+        int bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
         if (bytes_written < 0) {
             fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
@@ -38,20 +39,19 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        
+        //Tirar Menagem do Pipe e por no stdout
         Message message;
-        char worker_buffer[sizeof(Message)];
-        ssize_t bytes_read = read(worker_fifo_read, worker_buffer, sizeof(worker_buffer));
+        char message_buffer[1024];
+        ssize_t bytes_read = read_fifo(worker_fifo_read, message_buffer, 1);
+        int code = atoi(message_buffer);
+        //verificar opcode?
+        bytes_read = read_fifo(worker_fifo_read, message_buffer, (sizeof(message_buffer)-1));
         while(bytes_read > 0){//will exit once the pipe writer exits
-            //fazer nao espera ativa
-            sscanf(worker_buffer, "%u%s%s", &message.code, message.message.message);
-            //verificar opcode?
             fprintf(stdout, "%s\n", message.message);
-            bytes_read = read(worker_fifo_read, buffer, sizeof(buffer));
-        }
-        if (bytes_read < 0){//error
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
+            bytes_read = read_fifo(worker_fifo_read, message_buffer, 1);
+            int code = atoi(message_buffer);
+            //verificar opcode?
+            bytes_read = read_fifo(worker_fifo_read, message_buffer, (sizeof(message_buffer)-1));
         }
         
         //deve processar o SIGINT

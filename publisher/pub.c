@@ -8,8 +8,7 @@
 #include "commons/protocol.h"
 #include "logging.h"
 
-int main(int argc, char **argv) {
-
+int main(int argc, char **argv){
     if(argc == 4){
         //Open register fifo for writing request
         int register_fifo_write = open(argv[1], O_WRONLY);
@@ -23,14 +22,15 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        // Create request message
-        Message requestMessage;
-        requestMessage.code = 1;
-        strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
-        strcpy(requestMessage.registration_request.box_name, argv[3]);
-        // Serialize the message into a buffer
-        char request_buffer[sizeof(Message)];
-        sprintf(request_buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
+        //Create request message serialized buffer and send through pipe
+        Request pub_request;
+        pub_request.code = 1;
+        pub_request.client_named_pipe_path[256];
+        pub_request.box_name[32];
+        strcpy(pub_request.client_named_pipe_path, argv[2]);
+        strcpy(pub_request.box_name, argv[3]);
+        char request_buffer[sizeof(Request)];
+        sprintf(request_buffer, "%u%s%s", pub_request.code , pub_request.client_named_pipe_path, pub_request.box_name);
         // Write the serialized message to the FIFO
         int bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
         if (bytes_written < 0) {
@@ -38,15 +38,15 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         //Como saber se foi aceite ou nao?
-        
+        //ler linhas do input e mandar pelo pipe
         Message message;
         char line[sizeof(message.message)];
-        char worker_buffer[sizeof(Message)];
-        while (fgets(line, sizeof(line), stdin) != NULL){//fazer nao espera ativa, assim esta a ler linha a linha?
+        char message_buffer[sizeof(Message)];
+        while (fgets(line, sizeof(line), stdin) != NULL){//assim esta a ler linha a linha?
             message.code = 9;
             strcpy(message.message, line);
-            sprintf(request_buffer, "%u%s%s", message.code, message.message.message);
-            write(worker_fifo_write, worker_buffer, sizeof(worker_buffer));
+            sprintf(message_buffer, "%u%s", message.code, message.message);
+            write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);

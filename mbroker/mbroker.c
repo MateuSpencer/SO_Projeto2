@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 
+#include "../fs/operations.h"
 #include "logging.h"
 #include "commons/protocol.h"
 #include "producer-consumer.h"
@@ -19,7 +20,9 @@ int main(int argc, char **argv){
 
     if(argc == 3){
         pc_queue_t queue;
-        if (pcq_create(&queue, argv[2]) != 0){//TODO: qual é o tamanho da queue?
+        int num_threads = atoi(argv[2]);
+        int queue_size = 2*num_threads;
+        if (pcq_create(&queue, queue_size) != 0){
         fprintf(stderr, "Error creating producer-consumer queue\n");
         return 1;
         }
@@ -34,7 +37,7 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
         // Dynamically allocate memory for the thread array
-        int num_threads = atoi(argv[2]);
+        
         pthread_t *worker_threads = malloc(num_threads * sizeof(pthread_t));
         if (worker_threads == NULL) {
             fprintf(stderr, "Error allocating memory for threads\n");
@@ -60,7 +63,7 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        char buffer[sizeof(Message)];
+        char *buffer;
         ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         while(bytes_read > 0){
             if (pcq_enqueue(&queue, buffer) != 0) {
@@ -100,16 +103,17 @@ int main(int argc, char **argv){
 
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
+    int code = 0;
     while (!stop_workers) {
         // Dequeue a request
         char *request = (char*)pcq_dequeue(queue);
         // Process the request
-        Message received_message;
-        sscanf(request, "%u%s%s", &received_message.code, received_message.registration_request.client_named_pipe_path, received_message.registration_request.box_name);
-        switch (received_message.code){
+        int code = atoi(request[0]);
+        //ler so o primerio byte
+        switch (code){
             case 1: //Received request for publisher registration
 
-                //recebe estas
+                //recebe estas e guarda na caixa
                 //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
                 
                 break;
@@ -121,7 +125,8 @@ void *worker_thread_func(void *arg) {
 
                 break;
             case 3: //Received request for box creation
-
+                
+                //tfs_open(nome_do_worker_pipe., TFS_O_CREAT);
                 //Resposta: [ code = 4 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ] 
 
             
@@ -140,7 +145,7 @@ void *worker_thread_func(void *arg) {
             
                 break;
             default:
-                printf("Received unknown message with code %u\n", received_message.code);
+                printf("Received unknown message with code %u\n", code);
                 break;
         }
 

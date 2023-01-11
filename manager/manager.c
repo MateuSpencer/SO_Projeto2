@@ -28,27 +28,30 @@ int main(int argc, char **argv) {
 
         return 0;
     }else if(argc == 4){
-        Message requestMessage;
-        requestMessage.code = 0;
+        
+        uint8_t code = 0;
         if(strcmp(argv[2],"create")){
-            requestMessage.code = 3;
+            code = 3;
         }else if(strcmp(argv[2],"remove")){ 
-            requestMessage.code = 5;
+            code = 5;
         }
-        if(requestMessage.code != 0){
+        if(code != 0){
             int register_fifo_write = open(argv[1], O_WRONLY);
             if (register_fifo_write == -1){
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            // Create request message
-            strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
-            strcpy(requestMessage.registration_request.box_name, argv[3]);
-            // Serialize the message into a buffer
-            char buffer[sizeof(Message)];
-            sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
+            //Create request message serialized buffer and send through pipe
+            Request box_request;
+            box_request.code = code;
+            box_request.client_named_pipe_path[256];
+            box_request.box_name[32];
+            strcpy(box_request.client_named_pipe_path, argv[2]);
+            strcpy(box_request.box_name, argv[3]);
+            char request_buffer[sizeof(Request)];
+            sprintf(request_buffer, "%u%s%s", box_request.code , box_request.client_named_pipe_path, box_request.box_name);
             // Write the serialized message to the FIFO
-            int bytes_written = write(register_fifo_write, buffer, sizeof(buffer));
+            int bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
@@ -60,19 +63,15 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             //ler resposta
-            Message boxResponse;
-            char worker_buffer[sizeof(Message)];
-            ssize_t bytes_read = read(worker_fifo_read, worker_buffer, sizeof(worker_buffer));
-            if (bytes_read < 0){//error
-                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-            sscanf(worker_buffer, "%u%d%s", &boxResponse.code, boxResponse.box_response.return_code,boxResponse.box_response.error_message);
-            //verificar opcode?
-            if(boxResponse.box_response.return_code == 0){
+            Box_Response box_response;
+            char response_buffer[1024];
+            ssize_t bytes_read = read_fifo(worker_fifo_read, response_buffer, 1);
+            code = atoi(response_buffer);
+            if(code == 0){
                 fprintf(stdout, "OK\n");
-            }else if(boxResponse.box_response.return_code == -1){
-                fprintf(stdout, "ERROR %s\n", boxResponse.box_response.error_message);
+            }else if(code == -1){
+                bytes_read = read_fifo(worker_fifo_read, response_buffer, (sizeof(response_buffer)-1));
+                fprintf(stdout, "ERROR %s\n", response_buffer);
             }else{
                 //resposta desconhecida
             }
