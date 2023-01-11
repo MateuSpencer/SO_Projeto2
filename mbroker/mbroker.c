@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <string.h>
 
 #include "../fs/operations.h"
 #include "logging.h"
-#include "commons/protocol.h"
+#include "../commons/protocol.h"
 #include "producer-consumer.h"
 
 volatile sig_atomic_t stop_workers = 0;
@@ -21,24 +21,23 @@ int main(int argc, char **argv){
     if(argc == 3){
         pc_queue_t queue;
         int num_threads = atoi(argv[2]);
-        int queue_size = 2*num_threads;
-        if (pcq_create(&queue, queue_size) != 0){
+        if (pcq_create(&queue, (size_t)(2*num_threads)) != 0){
         fprintf(stderr, "Error creating producer-consumer queue\n");
         return 1;
         }
         //Remover pipe se ja existir
-        if (unlink(argv[1]) != 0 && errno != ENOENT) {
-            fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[1], strerror(errno));
+        if (unlink(argv[1]) != 0 ) {
+            fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[1]);
             exit(EXIT_FAILURE);
         }
         //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
         if (mkfifo(argv[1], S_IRUSR | S_IWOTH) != 0) {
-            fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: mkfifo failed\n");
             exit(EXIT_FAILURE);
         }
         // Dynamically allocate memory for the thread array
         
-        pthread_t *worker_threads = malloc(num_threads * sizeof(pthread_t));
+        pthread_t *worker_threads = malloc((unsigned long int)num_threads * sizeof(pthread_t));
         if (worker_threads == NULL) {
             fprintf(stderr, "Error allocating memory for threads\n");
             return 1;
@@ -54,16 +53,17 @@ int main(int argc, char **argv){
         pid_t pid = fork();
         if (pid == 0) {
             int register_fifo_ghost_writer = open(argv[1], O_WRONLY);
+            (void)register_fifo_ghost_writer;
             //se o servidor acabar isto devia ser terminado tho. - é tirar este, e assim quando os outros sairem todos o loop abaixo acaba
             //maybe uma condição de variavel, a depender de apanhar um SIGINT ou assim
         }
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(argv[1], O_RDONLY);
         if (register_fifo_read == -1){
-            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
-        char *buffer;
+        char *buffer = NULL;
         ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         while(bytes_read > 0){
             if (pcq_enqueue(&queue, buffer) != 0) {
@@ -73,7 +73,7 @@ int main(int argc, char **argv){
             bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         }
         if (bytes_read < 0){//error
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: read failed\n");
             exit(EXIT_FAILURE);
         }
         close(register_fifo_read);
@@ -103,12 +103,14 @@ int main(int argc, char **argv){
 
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
-    int code = 0;
+    int offset;
+    uint8_t code;
     while (!stop_workers) {
         // Dequeue a request
         char *request = (char*)pcq_dequeue(queue);
         // Process the request
-        int code = atoi(request[0]);
+        offset = 0;
+        memcpy(&code, request + offset, sizeof(code));
         //ler so o primerio byte
         switch (code){
             case 1: //Received request for publisher registration

@@ -2,6 +2,7 @@
 #define __protocol__
 
 #include <stdint.h>
+#include <unistd.h>
 
 typedef struct  {
     uint8_t code;
@@ -32,13 +33,13 @@ typedef struct  {
     char error_message[1024];
 }Box_Response;
 
-int read_fifo(int fifo, char *buffer, int n_nbytes){
-    int bytes_read = read(fifo, buffer, n_nbytes);
+ssize_t read_fifo(int fifo, char *buffer, size_t n_bytes){
+    ssize_t bytes_read = read(fifo, buffer, n_bytes);
     if (bytes_read == -1) {
-        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        return -1;
     }
-    return n_bytes;
+    return bytes_read;
 }
 
-#endif __protocol__
+
+#endif

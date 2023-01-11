@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <string.h>
 
-#include "commons/protocol.h"
+#include "../commons/protocol.h"
 #include "logging.h"
 
 int main(int argc, char **argv){
@@ -13,28 +13,26 @@ int main(int argc, char **argv){
         //Open register fifo for writing request
         int register_fifo_write = open(argv[1], O_WRONLY);
         if (register_fifo_write == -1){
-            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         //open worker_pipe so that the worker thread can open it for reading
         int worker_fifo_write = open(argv[1], O_WRONLY);
         if (register_fifo_write == -1){
-            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         //Create request message serialized buffer and send through pipe
         Request pub_request;
         pub_request.code = 1;
-        pub_request.client_named_pipe_path[256];
-        pub_request.box_name[32];
         strcpy(pub_request.client_named_pipe_path, argv[2]);
         strcpy(pub_request.box_name, argv[3]);
         char request_buffer[sizeof(Request)];
         sprintf(request_buffer, "%u%s%s", pub_request.code , pub_request.client_named_pipe_path, pub_request.box_name);
         // Write the serialized message to the FIFO
-        int bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
+        ssize_t bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
         if (bytes_written < 0) {
-            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: write failed\n");
             exit(EXIT_FAILURE);
         }
         //Como saber se foi aceite ou nao?
@@ -46,9 +44,9 @@ int main(int argc, char **argv){
             message.code = 9;
             strcpy(message.message, line);
             sprintf(message_buffer, "%u%s", message.code, message.message);
-            write(worker_fifo_write, message_buffer, sizeof(message_buffer));
+            bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
-                fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+                fprintf(stderr, "[ERR]: write failed\n");
                 exit(EXIT_FAILURE);
             }
         }
