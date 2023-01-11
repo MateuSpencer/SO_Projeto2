@@ -60,7 +60,7 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        char buffer[sizeof(RequestMessage)];
+        char buffer[sizeof(Message)];
         ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         while(bytes_read > 0){
             if (pcq_enqueue(&queue, buffer) != 0) {
@@ -104,9 +104,9 @@ void *worker_thread_func(void *arg) {
         // Dequeue a request
         char *request = (char*)pcq_dequeue(queue);
         // Process the request
-        RequestMessage message;
-        sscanf(request, "%u%s%s", &message.code, message.client_named_pipe_path, message.box_name);
-        switch (message.code){
+        Message received_message;
+        sscanf(request, "%u%s%s", &received_message.code, received_message.registration_request.client_named_pipe_path, received_message.registration_request.box_name);
+        switch (received_message.code){
             case 1: //Received request for publisher registration
 
                 //recebe estas
@@ -140,7 +140,7 @@ void *worker_thread_func(void *arg) {
             
                 break;
             default:
-                printf("Received unknown message with code %u\n", message.code);
+                printf("Received unknown message with code %u\n", received_message.code);
                 break;
         }
 

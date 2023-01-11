@@ -18,13 +18,13 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         // Create request message
-        RequestMessage requestMessage;
+        Message requestMessage;
         requestMessage.code = 2;
-        strcpy(requestMessage.client_named_pipe_path, argv[2]);
-        strcpy(requestMessage.box_name, argv[3]);
+        strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
+        strcpy(requestMessage.registration_request.box_name, argv[3]);
         // Serialize the message into a buffer
-        char buffer[sizeof(RequestMessage)];
-        sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.client_named_pipe_path, requestMessage.box_name);
+        char buffer[sizeof(Message)];
+        sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
         // Write the serialized message to the FIFO
         int bytes_written = write(register_fifo_write, buffer, sizeof(buffer));
         if (bytes_written < 0) {
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
         ssize_t bytes_read = read(worker_fifo_read, worker_buffer, sizeof(worker_buffer));
         while(bytes_read > 0){//will exit once the pipe writer exits
             //fazer nao espera ativa
-            sscanf(worker_buffer, "%u%s%s", &message.code, message.message);
+            sscanf(worker_buffer, "%u%s%s", &message.code, message.message.message);
             //verificar opcode?
             fprintf(stdout, "%s\n", message.message);
             bytes_read = read(worker_fifo_read, buffer, sizeof(buffer));

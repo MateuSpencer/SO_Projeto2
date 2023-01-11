@@ -15,7 +15,6 @@ static void print_usage() {
                     "   manager <register_pipe_name> <pipe_name> list\n");
 }
 
-//TODO: Simplificar bue codigo repetido
 int main(int argc, char **argv) {
 
     if(argc == 3){
@@ -29,7 +28,7 @@ int main(int argc, char **argv) {
 
         return 0;
     }else if(argc == 4){
-        RequestMessage requestMessage;
+        Message requestMessage;
         requestMessage.code = 0;
         if(strcmp(argv[2],"create")){
             requestMessage.code = 3;
@@ -43,11 +42,11 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             // Create request message
-            strcpy(requestMessage.client_named_pipe_path, argv[2]);
-            strcpy(requestMessage.box_name, argv[3]);
+            strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
+            strcpy(requestMessage.registration_request.box_name, argv[3]);
             // Serialize the message into a buffer
-            char buffer[sizeof(RequestMessage)];
-            sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.client_named_pipe_path, requestMessage.box_name);
+            char buffer[sizeof(Message)];
+            sprintf(buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
             // Write the serialized message to the FIFO
             int bytes_written = write(register_fifo_write, buffer, sizeof(buffer));
             if (bytes_written < 0) {

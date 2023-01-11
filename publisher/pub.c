@@ -24,13 +24,13 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         // Create request message
-        RequestMessage requestMessage;
+        Message requestMessage;
         requestMessage.code = 1;
-        strcpy(requestMessage.client_named_pipe_path, argv[2]);
-        strcpy(requestMessage.box_name, argv[3]);
+        strcpy(requestMessage.registration_request.client_named_pipe_path, argv[2]);
+        strcpy(requestMessage.registration_request.box_name, argv[3]);
         // Serialize the message into a buffer
-        char request_buffer[sizeof(RequestMessage)];
-        sprintf(request_buffer, "%u%s%s", requestMessage.code, requestMessage.client_named_pipe_path, requestMessage.box_name);
+        char request_buffer[sizeof(Message)];
+        sprintf(request_buffer, "%u%s%s", requestMessage.code, requestMessage.registration_request.client_named_pipe_path, requestMessage.registration_request.box_name);
         // Write the serialized message to the FIFO
         int bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
         if (bytes_written < 0) {
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         while (fgets(line, sizeof(line), stdin) != NULL){//fazer nao espera ativa, assim esta a ler linha a linha?
             message.code = 9;
             strcpy(message.message, line);
-            sprintf(request_buffer, "%u%s%s", message.code, message.message);
+            sprintf(request_buffer, "%u%s%s", message.code, message.message.message);
             write(worker_fifo_write, worker_buffer, sizeof(worker_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
