@@ -49,14 +49,6 @@ int main(int argc, char **argv){
                 return 1;
             }
         }
-        // Open pipe for writing in a different process
-        pid_t pid = fork();
-        if (pid == 0) {
-            int register_fifo_ghost_writer = open(argv[1], O_WRONLY);
-            (void)register_fifo_ghost_writer;
-            //se o servidor acabar isto devia ser terminado tho. - é tirar este, e assim quando os outros sairem todos o loop abaixo acaba
-            //maybe uma condição de variavel, a depender de apanhar um SIGINT ou assim
-        }
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(argv[1], O_RDONLY);
         if (register_fifo_read == -1){
@@ -64,13 +56,16 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
         char buffer[sizeof(Request)];
-        ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
-        while(bytes_read > 0){
+        ssize_t bytes_read;
+        int end = 0;
+        while(end == 0){
+            printf("Waiting for another request - %lu\n", bytes_read);
+            bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
+            printf("Received other request - %lu\n", bytes_read);
             if (pcq_enqueue(&queue, buffer) != 0) {
                 fprintf(stderr, "Error enqueuing request\n");
                 return 1;
             }
-            bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         }
         if (bytes_read < 0){//error
             fprintf(stderr, "[ERR]: read failed1\n");
