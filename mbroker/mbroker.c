@@ -25,13 +25,13 @@ int main(int argc, char **argv){
         fprintf(stderr, "Error creating producer-consumer queue\n");
         return 1;
         }
-        //Remover pipe se ja existir
-        if (unlink(argv[1]) != 0 ) {
-            fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[1]);
-            exit(EXIT_FAILURE);
+        if(access(argv[1], F_OK) == 0) {
+            if(unlink(argv[1]) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[1]);
+            }
         }
         //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
-        if (mkfifo(argv[1], S_IRUSR | S_IWOTH) != 0) {
+        if (mkfifo(argv[1], 0640) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed\n");
             exit(EXIT_FAILURE);
         }
@@ -63,7 +63,7 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
-        char *buffer = NULL;
+        char buffer[sizeof(Request)];
         ssize_t bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         while(bytes_read > 0){
             if (pcq_enqueue(&queue, buffer) != 0) {
@@ -73,7 +73,7 @@ int main(int argc, char **argv){
             bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
         }
         if (bytes_read < 0){//error
-            fprintf(stderr, "[ERR]: read failed\n");
+            fprintf(stderr, "[ERR]: read failed1\n");
             exit(EXIT_FAILURE);
         }
         close(register_fifo_read);
@@ -110,7 +110,9 @@ void *worker_thread_func(void *arg) {
         char *request = (char*)pcq_dequeue(queue);
         // Process the request
         offset = 0;
+        printf("%s\n",request);
         memcpy(&code, request + offset, sizeof(code));
+        printf("%u\n", code);
         //ler so o primerio byte
         switch (code){
             case 1: //Received request for publisher registration
@@ -150,8 +152,6 @@ void *worker_thread_func(void *arg) {
                 printf("Received unknown message with code %u\n", code);
                 break;
         }
-
-        free(request);
     }
     return NULL;
 }

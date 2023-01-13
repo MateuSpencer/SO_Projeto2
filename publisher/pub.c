@@ -11,6 +11,7 @@
 int main(int argc, char **argv){
     if(argc == 4){
         //Open register fifo for writing request
+        printf("%s",argv[1]);
         int register_fifo_write = open(argv[1], O_WRONLY);
         if (register_fifo_write == -1){
             fprintf(stderr, "[ERR]: open failed\n");
@@ -23,18 +24,29 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
         //Create request message serialized buffer and send through pipe
+        long unsigned int offset = 0;
         Request pub_request;
         pub_request.code = 1;
         strcpy(pub_request.client_named_pipe_path, argv[2]);
         strcpy(pub_request.box_name, argv[3]);
         char request_buffer[sizeof(Request)];
-        sprintf(request_buffer, "%u%s%s", pub_request.code , pub_request.client_named_pipe_path, pub_request.box_name);
+        memcpy(request_buffer, &pub_request.code, sizeof(pub_request.code));
+        offset += sizeof(pub_request.code);
+        memcpy(request_buffer + offset, pub_request.client_named_pipe_path, strlen(pub_request.client_named_pipe_path));
+        offset += strlen(pub_request.client_named_pipe_path);
+        memset(request_buffer + offset, '\0', 256 - strlen(pub_request.client_named_pipe_path));
+        offset += (256 - strlen(pub_request.client_named_pipe_path));
+        memcpy(request_buffer + strlen(pub_request.client_named_pipe_path), pub_request.box_name, strlen(pub_request.box_name));
+        offset += strlen(pub_request.box_name);
+        memset(request_buffer + offset, '\0', 32 - strlen(pub_request.box_name));        
+        printf("%s\n",request_buffer);
         // Write the serialized message to the FIFO
         ssize_t bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
         if (bytes_written < 0) {
             fprintf(stderr, "[ERR]: write failed\n");
             exit(EXIT_FAILURE);
         }
+        printf("SENT\n");
         //Como saber se foi aceite ou nao?
         //ler linhas do input e mandar pelo pipe
         Message message;

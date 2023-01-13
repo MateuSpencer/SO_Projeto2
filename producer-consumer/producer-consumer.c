@@ -55,21 +55,22 @@ int pcq_enqueue(pc_queue_t *queue, void *elem) {
     //update size and head of queue (% to wrap arround when it is the last index)
     queue->pcq_tail = (queue->pcq_tail + 1) % queue->pcq_capacity;
     queue->pcq_current_size++;
+        // Signal popper condition variable to wake up threads that are waiting to dequeue an element
+    pthread_cond_signal(&queue->pcq_popper_condvar);
     pthread_mutex_unlock(&queue->pcq_tail_lock);
     pthread_mutex_unlock(&queue->pcq_current_size_lock);
-    // Signal popper condition variable to wake up threads that are waiting to dequeue an element
-    pthread_cond_signal(&queue->pcq_popper_condvar);
-
+    printf("Exiting Enqueue\n");
     return 0;
 }
 
 void *pcq_dequeue(pc_queue_t *queue) {
     void *elem;
-
     // If the queue is empty, wait on the condition variable, until the queue has an element
     pthread_mutex_lock(&queue->pcq_current_size_lock);
     while (queue->pcq_current_size == 0) {
+        printf("waiting dequeue\n");
         pthread_cond_wait(&queue->pcq_popper_condvar, &queue->pcq_current_size_lock);
+        printf("DEQUEUE Received signal & mutex was unlocked");
     }
     // Dequeue the element at the current head position
     pthread_mutex_lock(&queue->pcq_head_lock);
@@ -77,9 +78,9 @@ void *pcq_dequeue(pc_queue_t *queue) {
     //update size and head of queue (% to wrap arround when it is the last index)
     queue->pcq_head = (queue->pcq_head + 1) % queue->pcq_capacity;
     queue->pcq_current_size--;
-    pthread_mutex_unlock(&queue->pcq_head_lock);
-    pthread_mutex_unlock(&queue->pcq_current_size_lock);
     // Signal pusher condition variable to wake up threads that are waiting to enqueue an element
     pthread_cond_signal(&queue->pcq_pusher_condvar);
+    pthread_mutex_unlock(&queue->pcq_head_lock);
+    pthread_mutex_unlock(&queue->pcq_current_size_lock);
     return elem;
 }
