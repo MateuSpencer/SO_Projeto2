@@ -59,7 +59,6 @@ int pcq_enqueue(pc_queue_t *queue, void *elem) {
     // Signal popper condition variable to wake up threads that are waiting to dequeue an element
     pthread_cond_signal(&queue->pcq_popper_condvar);
     pthread_mutex_unlock(&queue->pcq_current_size_lock);
-    printf("Exiting Enqueue\n");
     return 0;
 }
 
@@ -68,9 +67,7 @@ void *pcq_dequeue(pc_queue_t *queue) {
     // If the queue is empty, wait on the condition variable, until the queue has an element
     pthread_mutex_lock(&queue->pcq_current_size_lock);
     while (queue->pcq_current_size == 0) {
-        printf("waiting dequeue\n");
         pthread_cond_wait(&queue->pcq_popper_condvar, &queue->pcq_current_size_lock);
-        printf("DEQUEUE Received signal & mutex was unlocked");
     }
     // Dequeue the element at the current head position
     pthread_mutex_lock(&queue->pcq_head_lock);
