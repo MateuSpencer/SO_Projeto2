@@ -4,13 +4,21 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <signal.h>
 
 #include "../commons/protocol.h"
 #include "logging.h"
 
+void sigpipe_handler(int signum) {
+    printf("SIGPIPE: %d\n", signum);
+}
+
 int main(int argc, char **argv){
     if(argc == 4){
         
+        if (signal(SIGPIPE, sigpipe_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
         //Open register fifo for writing request
         int register_fifo_write = open(argv[1], O_WRONLY);
         if (register_fifo_write == -1){
@@ -45,12 +53,15 @@ int main(int argc, char **argv){
         }
         //Como saber se foi aceite ou nao?
         //open worker_pipe for writing
-        printf("GONNA OPEN FOR READ?\n");
         int worker_fifo_write = open(argv[2], O_WRONLY);
         if (worker_fifo_write == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
+        //testar se foi aceite -  se nao a funçao de hndle devia acabar com o projeto como deve ser
+        char message_test[] = "0";
+        bytes_written = write(worker_fifo_write, message_test, sizeof(message_test));
+
         //ler linhas do input e mandar pelo pipe
         Message message;
         char line[sizeof(message.message)];

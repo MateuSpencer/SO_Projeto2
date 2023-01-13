@@ -123,7 +123,8 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                
+                //caso seja preciso nao aceitar lançar isto
+                close(worker_fifo_read);
                 //recebe estas e guarda na caixa
                 //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
                 
