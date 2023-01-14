@@ -12,66 +12,20 @@
 #include "../protocol/protocol.h"
 #include "producer-consumer.h"
 
+
+void *worker_thread_func(void *arg);
+
 //volatile sig_atomic_t to make it thread safe
 volatile sig_atomic_t stop_workers = 0;
 
-//Struct for box data
-typedef struct {
-    char box_name[32];
-    int n_publishers;
-    int n_subscribers;
-    pthread_cond_t box_new_message_cond;
-    struct node *next;
-}BoxData;
-//Struct to support list of boxes
-typedef struct{
-    struct node *head;
-    struct node *tail;
-}BoxList;
-
-void insert_at_beginning(BoxList *list, char* box_name, int n_publishers, int n_subscribers) {
-    BoxData *new_box_data = (BoxData*)malloc(sizeof(BoxData));
-    pthread_cond_init(&new_box_data->box_new_message_cond, NULL);
-    strcpy(new_box_data->box_name, box_name);
-    new_box_data->n_publishers = n_publishers;
-    new_box_data->n_subscribers = n_subscribers;
-    new_box_data->next = list->head;
-    list->head = new_box_data;
-    if(list->tail == NULL) {
-        list->tail = new_box_data;
-    }
-}
-
-void delete_node(BoxList *list, char* box_name) {
-    BoxData *temp = list->head;
-    BoxData *prev = NULL;
-    //node to be deleted is the head
-    if (temp != NULL && strcmp(box_name, temp->box_name) == 0) {
-        list->head = temp->next;
-        free(temp);
-        return;
-    }
-    //node to be deleted is not the head
-    while (temp != NULL && strcmp(box_name, temp->box_name) != 0) {
-        prev = temp;
-        temp = temp->next;
-    }
-    //the node was not found
-    if (temp == NULL) {
-        return;
-    }
-    // Unlink the node from the list
-    prev->next = temp->next;
-    if(temp == list->tail) list->tail = prev; 
-    free(temp);
-}
-
-
-void *worker_thread_func(void *arg);
+//Global variable for list of boxes
+BoxList box_list;
 
 int main(int argc, char **argv){
 
     if(argc == 3){
+        box_list.head = NULL;
+        box_list.tail = NULL;
         //Initialize TFS
         assert(tfs_init(NULL) != -1);
         pc_queue_t queue;
@@ -165,12 +119,16 @@ void *worker_thread_func(void *arg) {
     uint8_t code = 0;
     Request request;
     Box_Response box_reponse;
-    Message message;
-    ListingRequest listing_request;
-    char message_buffer[sizeof(Message)];
     char new_box_name[40];
+    Message message;
+    char message_buffer[sizeof(Message)];
+    ListingRequest listing_request;
+    ListingResponse listing_response;
+    char listing_buffer[sizeof(ListingResponse)];
     int worker_fifo_write;
     int worker_fifo_read;
+    BoxData *box_data;
+    ssize_t bytes_written;
 
     while (!stop_workers) {
         pthread_t thread_id = pthread_self();//TODO
@@ -198,16 +156,20 @@ void *worker_thread_func(void *arg) {
                 //Adicionar / ao inicio do nome da Box e tentar abrira a box
                 sprintf(new_box_name, "/%s", request.box_name);
                 int publisher_file_handle = tfs_open(new_box_name, TFS_O_APPEND);
-                if(publisher_file_handle >= 0){//ir logo para o close e dar SIGPIPE
+                box_data = find_box(&box_list, new_box_name);
+                if(box_data != NULL && publisher_file_handle >= 0 && box_data->n_publishers == 0 ){//ir logo para o close e dar SIGPIPE
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
+                    box_data->n_publishers = 1;
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                     while(bytes_read > 0){
                         memcpy(&message.code, message_buffer, sizeof(message.code));
                         offset = 0;
                         offset += sizeof(message.code);
                         remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
-                        printf("--%s--\n",message.message);//TODO
-                        tfs_write(publisher_file_handle, message.message, sizeof(message.message));
+                        tfs_write(publisher_file_handle, message.message, sizeof(message.message));// escrever um \0 a seguir? ou ja vem com isso? ou nem preciso pq vou sempre ler o mm tamanho
+                        //aumentar tamanho da caixa
+                        size_t message_len = strlen(message.message);
+                        box_data->box_size += message_len;
                         //ler proxima mensagem
                         bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                     }
@@ -215,6 +177,7 @@ void *worker_thread_func(void *arg) {
                         fprintf(stderr, "[ERR]: read failed1\n");
                         exit(EXIT_FAILURE);
                     }
+                    box_data->n_publishers = 0;
                 }
                 close(worker_fifo_read);
                 break;
@@ -229,7 +192,6 @@ void *worker_thread_func(void *arg) {
                     exit(EXIT_FAILURE);
                 }
                 
-                //le da caixa e envia estas
                 //[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
                 
 
@@ -254,8 +216,11 @@ void *worker_thread_func(void *arg) {
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
+                    //adicionar box a lista
+                    insert_at_beginning(&box_list, new_box_name, 0, 0, 0);
                 }                
                 send_box_response(box_reponse, worker_fifo_write);
+                close(worker_fifo_write);
                 break;
             case 5: //Received request for box removal
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
@@ -278,8 +243,11 @@ void *worker_thread_func(void *arg) {
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
+                    //apagar box da lista
+                    delete_box(&box_list, new_box_name);
                 }                
-                send_box_response(box_reponse, worker_fifo_write);            
+                send_box_response(box_reponse, worker_fifo_write);   
+                close(worker_fifo_write);         
                 break;
             case 7: //Received request for box listing
                 remove_strings_from_buffer(request_buffer + offset, listing_request.client_named_pipe_path , sizeof(listing_request.client_named_pipe_path));
@@ -288,8 +256,40 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                    //[ code = 8 (uint8_t) ] | [ last (uint8_t) ] | [ box_name (char[32]) ] | [ box_size (uint64_t) ] | [ n_publishers (uint64_t) ] | [ n_subscribers (uint64_t) ]
-            
+                box_data = box_list.head;
+                while(box_data != NULL){
+                    offset = 0;
+                    listing_response.code = 8;
+                    memcpy(listing_buffer, &listing_response.code, sizeof(listing_response.code));
+                    offset += sizeof(listing_response.code);
+                    if(box_data == box_list.tail){
+                        listing_response.last = 1;
+                    }else{
+                        listing_response.last = 0;
+                    }
+                    memcpy(listing_buffer + offset, &listing_response.last, sizeof(listing_response.last));
+                    offset += sizeof(listing_response.last);
+                    strcpy(box_data->box_name, box_data->box_name + 1);//retirar a / do inicio
+                    store_string_in_buffer(listing_buffer + offset, box_data->box_name, sizeof(box_data->box_name));
+                    offset += sizeof(box_data->box_name);
+                    listing_response.box_size = box_data->box_size;
+                    memcpy(listing_buffer + offset, &listing_response.box_size, sizeof(listing_response.box_size));
+                    offset += sizeof(listing_response.box_size);
+                    listing_response.n_publishers = box_data->n_publishers;
+                    memcpy(listing_buffer + offset, &listing_response.n_publishers, sizeof(listing_response.n_publishers));
+                    offset += sizeof(listing_response.n_publishers);
+                    listing_response.n_subscribers = box_data->n_subscribers;
+                    memcpy(listing_buffer + offset, &listing_response.n_subscribers, sizeof(listing_response.n_subscribers));
+
+                    bytes_written = write(worker_fifo_write, listing_buffer, sizeof(listing_buffer));
+                    if (bytes_written < 0) {
+                        fprintf(stderr, "[ERR]: write failed\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    box_data = box_data->next;
+                }
+                close(worker_fifo_write);
                 break;
             default:
                 printf("Received unknown message with code %u\n", code);

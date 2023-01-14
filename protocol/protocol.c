@@ -2,6 +2,57 @@
 
 #include <string.h>
 
+
+void insert_at_beginning(BoxList *list, char* box_name, uint64_t box_size, uint64_t n_publishers, uint64_t n_subscribers) {
+    BoxData *new_box_data = (BoxData *)malloc(sizeof(BoxData));
+    pthread_cond_init(&new_box_data->box_new_message_cond, NULL);
+    strcpy(new_box_data->box_name, box_name);
+    new_box_data->box_size = box_size;
+    new_box_data->n_publishers = n_publishers;
+    new_box_data->n_subscribers = n_subscribers;
+    new_box_data->next = list->head;
+    list->head = new_box_data;
+    if(list->tail == NULL) {
+        list->tail = new_box_data;
+    }
+}
+
+BoxData* find_box(BoxList *list, char* box_name) {
+    BoxData* current = list->head;
+    while (current != NULL) {
+        if (strcmp(box_name, current->box_name) == 0){
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void delete_box(BoxList *list, char* box_name) {
+    BoxData  *temp = list->head;
+    BoxData *prev = NULL;
+    //node to be deleted is the head
+    if (temp != NULL && strcmp(box_name, temp->box_name) == 0) {
+        list->head = temp->next;
+        free(temp);
+        return;
+    }
+    //node to be deleted is not the head
+    while (temp != NULL && strcmp(box_name, temp->box_name) != 0) {
+        prev = temp;
+        temp = temp->next;
+    }
+    //the node was not found
+    if (temp == NULL) {
+        return;
+    }
+    // Unlink the node from the list
+    prev->next = temp->next;
+    if(temp == list->tail) list->tail = prev; 
+    free(temp);
+}
+
+
 ssize_t read_fifo(int fifo, char *buffer, size_t n_bytes){
     ssize_t bytes_read = read(fifo, buffer, n_bytes);
     if (bytes_read == -1) {

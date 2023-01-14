@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 typedef struct  {
     uint8_t code;
@@ -34,6 +35,28 @@ typedef struct  {
     int32_t return_code;
     char error_message[1024];
 }Box_Response;
+
+//Struct for box data
+typedef struct boxdata{
+    char box_name[32];
+    uint64_t box_size;
+    uint64_t n_publishers;
+    uint64_t n_subscribers;
+    pthread_cond_t box_new_message_cond;
+    struct boxdata *next;
+}BoxData;
+//Struct to support list of boxes
+typedef struct{
+    BoxData *head;
+    BoxData *tail;
+    //TODO precisa de um mutex
+}BoxList;
+
+void insert_at_beginning(BoxList *list, char* box_name, uint64_t box_size, uint64_t n_publishers, uint64_t n_subscribers);
+
+BoxData* find_box(BoxList *list, char* box_name);
+
+void delete_box(BoxList *list, char* box_name);
 
 ssize_t read_fifo(int fifo, char *buffer, size_t n_bytes);
 
