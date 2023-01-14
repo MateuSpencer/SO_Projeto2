@@ -114,6 +114,7 @@ void *worker_thread_func(void *arg) {
     Request request;
     Box_Response box_reponse;
     Message message;
+    ListingRequest listing_request;
     char message_buffer[sizeof(Message)];
     char new_box_name[40];
     int worker_fifo_write;
@@ -136,6 +137,7 @@ void *worker_thread_func(void *arg) {
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
                 
                 // Open pipe for reading (waits for someone to open it for writing)
+                //como registar quantos publishers cada caixa tem
                 worker_fifo_read = open(request.client_named_pipe_path, O_RDONLY);
                 if (worker_fifo_read == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
@@ -144,7 +146,6 @@ void *worker_thread_func(void *arg) {
                 //Adicionar / ao inicio do nome da Box e tentar abrira a box
                 sprintf(new_box_name, "/%s", request.box_name);
                 int publisher_file_handle = tfs_open(new_box_name, TFS_O_APPEND);
-                printf("return do open %d\n", publisher_file_handle);
                 if(publisher_file_handle >= 0){//ir logo para o close e dar SIGPIPE
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
@@ -152,7 +153,7 @@ void *worker_thread_func(void *arg) {
                         memcpy(&message.code, message_buffer, sizeof(message.code));
                         offset = 0;
                         offset += sizeof(message.code);
-                        remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));//Vem com um \n
+                        remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
                         printf("--%s--\n",message.message);//TODO
                         tfs_write(publisher_file_handle, message.message, sizeof(message.message));
                         //ler proxima mensagem
@@ -229,10 +230,13 @@ void *worker_thread_func(void *arg) {
                 send_box_response(box_reponse, worker_fifo_write);            
                 break;
             case 7: //Received request for box listing
-
-                //Resposta: varias mensagens assim
+                remove_strings_from_buffer(request_buffer + offset, listing_request.client_named_pipe_path , sizeof(listing_request.client_named_pipe_path));
+                worker_fifo_write = open(listing_request.client_named_pipe_path, O_WRONLY);
+                if (worker_fifo_write == -1){
+                    fprintf(stderr, "[ERR]: open failed\n");
+                    exit(EXIT_FAILURE);
+                }
                     //[ code = 8 (uint8_t) ] | [ last (uint8_t) ] | [ box_name (char[32]) ] | [ box_size (uint64_t) ] | [ n_publishers (uint64_t) ] | [ n_subscribers (uint64_t) ]
-
             
                 break;
             default:

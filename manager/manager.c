@@ -17,18 +17,39 @@ static void print_usage() {
 }
 
 int main(int argc, char **argv) {
-
+    long unsigned int offset = 0;
     if(argc == 4){
+        //Open register fifo for writing request
         int register_fifo_write = open(argv[1], O_WRONLY);
         if (register_fifo_write == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
-        //Pedido de listagem de caixas:
-            //[ code = 7 (uint8_t) ] | [ client_named_pipe_path (char[256]) ]
+        //Create worker fifo
+        if(access(argv[2], F_OK) == 0) {
+            if(unlink(argv[2]) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[2]);
+            }
+        }
+        if (mkfifo(argv[2], 0640) != 0) {
+            fprintf(stderr, "[ERR]: mkfifo failed--\n");
+            exit(EXIT_FAILURE);
+        }
+        ListingRequest listing_request;
+        char listing_buffer [sizeof(ListingRequest)];
+        memcpy(listing_buffer, &listing_request.code, sizeof(listing_request.code));
+        offset += sizeof(listing_request.code);
+        store_string_in_buffer(listing_buffer + offset, listing_request.client_named_pipe_path, sizeof(listing_request.client_named_pipe_path));
+        ssize_t bytes_written = write(argv[1], listing_buffer, sizeof(listing_buffer));
+        if (bytes_written < 0) {
+            fprintf(stderr, "[ERR]: write failed\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        //receber a resposta, ordenar, imprimir
 
         return 0;
-    }else if(argc == 5){
+    }else if(argc == 5){//Ou criar ou remover caixa
         
         uint8_t code = 0;
         if(strcmp(argv[3],"create") == 0){
@@ -71,7 +92,6 @@ int main(int argc, char **argv) {
             //ler resposta
             Box_Response box_response;
             char response_buffer[sizeof(Box_Response)];
-            long unsigned int offset = 0;
             //read the serialized message
             ssize_t bytes_read = read_fifo(worker_fifo_read, response_buffer, sizeof(Box_Response));
             if(bytes_read <0 ){
@@ -88,7 +108,7 @@ int main(int argc, char **argv) {
                 //read the return error message
                 offset += sizeof(box_response.return_code);
                 remove_strings_from_buffer(response_buffer + offset, box_response.error_message , sizeof(box_response.error_message));
-                fprintf(stdout, "ERROR: %s\n", box_response.error_message);
+                fprintf(stdout, "ERROR %s\n", box_response.error_message);
             }else{
                 printf("UNKNOWN BOX RESPONSE\n");
             }

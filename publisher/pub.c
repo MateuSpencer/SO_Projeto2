@@ -12,7 +12,7 @@
 void sigpipe_handler(int signum) {
     printf("SIGPIPE: %d\n", signum);
 }
-
+//TODO  a criar os worker pipes em vez de se ja existir os apagar, dar erro que ja existe e para dar outro nome
 int main(int argc, char **argv){
     if(argc == 4){
         
@@ -62,8 +62,11 @@ int main(int argc, char **argv){
             message.code = 9;
             memcpy(message_buffer, &message.code, sizeof(message.code));
             offset += sizeof(message.code);
+            char *newline = strchr(line, '\n');
+            if (newline) {
+                *newline = '\0';
+            }
             store_string_in_buffer(message_buffer + offset, line, sizeof(message.message));
-            //TODO: Devia garantir qu etem o \n no final, pq se for demasiado grande a função pode ter truncado
             bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed\n");
