@@ -148,13 +148,10 @@ void *worker_thread_func(void *arg) {
                 bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                 while(bytes_read > 0){
                     memcpy(&message.code, message_buffer, sizeof(message.code));
+                    offset = 0;
                     offset += sizeof(message.code);
-                    printf("%d\n",message.code);
-                    remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
-                    printf("%s\n",message.message);
-                    //TODO: escrever ana box, com um \n?
-
-
+                    remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));//Vem com um \n
+                    printf("--%s--\n",message.message);//TODO
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                 }
                 if (bytes_read < 0){//error

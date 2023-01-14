@@ -59,10 +59,9 @@ int main(int argc, char **argv){
         char message_buffer[sizeof(Message)];
         while (fgets(line, sizeof(line), stdin) != NULL){//assim esta a ler linha a linha?
             long unsigned int offset = 0;
-            uint8_t code = 9;
-            memcpy(message_buffer, &code, sizeof(code));
-            offset += sizeof(code);
-            printf("----%s\n",line);
+            message.code = 9;
+            memcpy(message_buffer, &message.code, sizeof(message.code));
+            offset += sizeof(message.code);
             store_string_in_buffer(message_buffer + offset, line, sizeof(message.message));
             bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
