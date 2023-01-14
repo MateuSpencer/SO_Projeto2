@@ -109,24 +109,29 @@ int main(int argc, char **argv){
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
     long unsigned int offset = 0;
+    ssize_t bytes_read;
     uint8_t code = 0;
     Request request;
     Box_Response box_reponse;
+    Message message;
+    char message_buffer[sizeof(Message)];
     char new_box_name[40];
     int worker_fifo_write;
     int worker_fifo_read;
+
     while (!stop_workers) {
         pthread_t thread_id = pthread_self();//TODO
-        
         // Dequeue a request
         char *request_buffer = (char*)pcq_dequeue(queue);
-        // Process the request
+        offset = 0;
         //ler so o primerio byte
         memcpy(&code, request_buffer, sizeof(code));
         offset += sizeof(code);
+
+        // Process the request
         switch (code){
             case 1: //Received request for publisher registration                
-
+                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
@@ -137,8 +142,27 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                //caso seja preciso nao aceitar lançar ist
-                    //close(worker_fifo_read);
+                
+                //caso seja preciso nao aceitar pq ja ha um publisher, por if a volta disto tudo para ir ogo para o close e dar SIGPIPE
+                bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
+                bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
+                while(bytes_read > 0){
+                    memcpy(&message.code, message_buffer, sizeof(message.code));
+                    offset += sizeof(message.code);
+                    printf("%d\n",message.code);
+                    remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
+                    printf("%s\n",message.message);
+                    //TODO: escrever ana box, com um \n?
+
+
+                    bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
+                }
+                if (bytes_read < 0){//error
+                    fprintf(stderr, "[ERR]: read failed1\n");
+                    exit(EXIT_FAILURE);
+                }
+                close(worker_fifo_read);
+                    
                 //recebe estas e guarda na caixa
                 //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
                 
@@ -153,6 +177,7 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
+                
                 //le da caixa e envia estas
                 //[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
                 

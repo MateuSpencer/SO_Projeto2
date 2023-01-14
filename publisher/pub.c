@@ -62,6 +62,7 @@ int main(int argc, char **argv){
             uint8_t code = 9;
             memcpy(message_buffer, &code, sizeof(code));
             offset += sizeof(code);
+            printf("----%s\n",line);
             store_string_in_buffer(message_buffer + offset, line, sizeof(message.message));
             bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {

@@ -11,18 +11,15 @@ ssize_t read_fifo(int fifo, char *buffer, size_t n_bytes){
 }
 
 void store_string_in_buffer(char* buffer, char* str1, size_t space) {
-    // Copy first string to first 5 bytes of buffer
     size_t str1_len = strlen(str1);
     size_t len = str1_len > space ? space : str1_len;//truncar strings demasiado grandes
     memcpy(buffer, str1, len);
-    // Fill remaining bytes with '\0' if the string is less than 5 bytes
-    if (str1_len < 5) {
-        memset(buffer + str1_len, '\0', 5 - str1_len);
+    if (str1_len < space) {
+        memset(buffer + str1_len, '\0', space - str1_len);
     }
 }
 
 void remove_strings_from_buffer(char* buffer, char* str1, size_t space) {
-    // Find the first null character in the first 5 bytes of buffer
     size_t i;
     for (i = 0; i < space; i++) {
         if (buffer[i] == '\0') {
