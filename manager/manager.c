@@ -6,7 +6,7 @@
 #include <string.h>
 
 
-#include "../commons/protocol.h"
+#include "../protocol/protocol.h"
 #include "logging.h"
 
 static void print_usage() {
@@ -56,20 +56,11 @@ int main(int argc, char **argv) {
             }
             
             //Create request message serialized buffer and send through pipe
-            long unsigned int offset = 0;
-            char request_buffer [sizeof(Request)];
             Request request;
-            memcpy(request_buffer, &code, sizeof(code));
-            offset += sizeof(code);
-            store_string_in_buffer(request_buffer + offset, argv[2], sizeof(request.client_named_pipe_path));
-            offset += sizeof(request.client_named_pipe_path);
-            store_string_in_buffer(request_buffer + offset, argv[4], sizeof(request.box_name));
-            // Write the serialized message to the FIFO
-            ssize_t bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
-            if (bytes_written < 0) {
-                fprintf(stderr, "[ERR]: write failed\n");
-                exit(EXIT_FAILURE);
-            }
+            request.code = code;
+            strcpy(request.client_named_pipe_path, argv[2]);
+            strcpy(request.box_name, argv[4]);
+            send_request( request, register_fifo_write);
             
             // Open pipe for reading (waits for someone to open it for writing)
             int worker_fifo_read = open(argv[2], O_RDONLY);
@@ -80,7 +71,7 @@ int main(int argc, char **argv) {
             //ler resposta
             Box_Response box_response;
             char response_buffer[sizeof(Box_Response)];
-            offset = 0;
+            long unsigned int offset = 0;
             //read the serialized message
             ssize_t bytes_read = read_fifo(worker_fifo_read, response_buffer, sizeof(Box_Response));
             bytes_read++;//TODO: because of unused

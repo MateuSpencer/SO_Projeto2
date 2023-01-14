@@ -6,7 +6,7 @@
 #include <string.h>
 #include <signal.h>
 
-#include "../commons/protocol.h"
+#include "../protocol/protocol.h"
 #include "logging.h"
 
 void sigpipe_handler(int signum) {
@@ -36,21 +36,12 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
         //Create request message serialized buffer and send through pipe
-        long unsigned int offset = 0;
-        char request_buffer [sizeof(Request)];
         Request request;
-        uint8_t code = 1;
-        memcpy(request_buffer, &code, sizeof(code));
-        offset += sizeof(code);
-        store_string_in_buffer(request_buffer + offset, argv[2], sizeof(request.client_named_pipe_path));
-        offset += sizeof(request.client_named_pipe_path);
-        store_string_in_buffer(request_buffer + offset, argv[3], sizeof(request.box_name));
-        // Write the serialized message to the FIFO
-        ssize_t bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
-        if (bytes_written < 0) {
-            fprintf(stderr, "[ERR]: write failed\n");
-            exit(EXIT_FAILURE);
-        }
+        request.code = 1;
+        strcpy(request.client_named_pipe_path, argv[2]);
+        strcpy(request.box_name, argv[3]);
+        send_request( request, register_fifo_write);
+        
         //Como saber se foi aceite ou nao?
         //open worker_pipe for writing
         int worker_fifo_write = open(argv[2], O_WRONLY);
@@ -58,20 +49,20 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
-        //testar se foi aceite -  se nao a funçao de hndle devia acabar com o projeto como deve ser
+        //testar se foi aceite -  se nao a funçao de hndle devia acabar com o publisher como deve ser
         char message_test[] = "0";
-        bytes_written = write(worker_fifo_write, message_test, sizeof(message_test));
+        ssize_t bytes_written = write(worker_fifo_write, message_test, sizeof(message_test));
 
         //ler linhas do input e mandar pelo pipe
         Message message;
         char line[sizeof(message.message)];
         char message_buffer[sizeof(Message)];
         while (fgets(line, sizeof(line), stdin) != NULL){//assim esta a ler linha a linha?
-            offset = 0;
-            code = 9;
+            long unsigned int offset = 0;
+            uint8_t code = 9;
             memcpy(message_buffer, &code, sizeof(code));
             offset += sizeof(code);
-            store_string_in_buffer(request_buffer + offset, line, sizeof(message.message));
+            store_string_in_buffer(message_buffer + offset, line, sizeof(message.message));
             bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed\n");

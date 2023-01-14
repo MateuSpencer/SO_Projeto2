@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <string.h>
 
-#include "../commons/protocol.h"
+#include "../protocol/protocol.h"
 #include "logging.h"
 
 int main(int argc, char **argv) {
@@ -29,21 +29,11 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         //Create request message serialized buffer and send through pipe
-        long unsigned int offset = 0;
-        char request_buffer [sizeof(Request)];
         Request request;
-        uint8_t code = 2;
-        memcpy(request_buffer, &code, sizeof(code));
-        offset += sizeof(code);
-        store_string_in_buffer(request_buffer + offset, argv[2], sizeof(request.client_named_pipe_path));
-        offset += sizeof(request.client_named_pipe_path);
-        store_string_in_buffer(request_buffer + offset, argv[3], sizeof(request.box_name));
-        // Write the serialized message to the FIFO
-        ssize_t bytes_written = write(register_fifo_write, request_buffer, sizeof(request_buffer));
-        if (bytes_written < 0) {
-            fprintf(stderr, "[ERR]: write failed\n");
-            exit(EXIT_FAILURE);
-        }
+        request.code = 2;
+        strcpy(request.client_named_pipe_path, argv[2]);
+        strcpy(request.box_name, argv[3]);
+        send_request( request, register_fifo_write);
         //Como saber se foi aceite ou nao?
         //TODO: catch SIGPIPE
         // Open pipe for reading (waits for someone to open it for writing)

@@ -8,7 +8,7 @@
 
 #include "../fs/operations.h"
 #include "logging.h"
-#include "../commons/protocol.h"
+#include "../protocol/protocol.h"
 #include "producer-consumer.h"
 
 volatile sig_atomic_t stop_workers = 0;
@@ -60,7 +60,6 @@ int main(int argc, char **argv){
         int end = 0;
         while(end == 0){
             bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
-            printf("Received request - %lu\n", bytes_read);
             if (pcq_enqueue(&queue, buffer) != 0) {
                 fprintf(stderr, "Error enqueuing request\n");
                 return 1;
@@ -111,31 +110,28 @@ void *worker_thread_func(void *arg) {
         offset += sizeof(code);
         switch (code){
             case 1: //Received request for publisher registration                
-                printf("-----%d\n", code);
+
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
-                printf("-----%s\n", request.client_named_pipe_path);
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                printf("-----%s\n", request.box_name);
+                
                 // Open pipe for reading (waits for someone to open it for writing)
                 worker_fifo_read = open(request.client_named_pipe_path, O_RDONLY);
                 if (worker_fifo_read == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                //caso seja preciso nao aceitar lançar isto
-                close(worker_fifo_read);
+                //caso seja preciso nao aceitar lançar ist
+                    //close(worker_fifo_read);
                 //recebe estas e guarda na caixa
                 //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
                 
                 break;
             case 2: //Received request for subscriber registration
-                printf("-----%d\n", code);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
-                printf("-----%s\n", request.client_named_pipe_path);
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                printf("-----%s\n", request.box_name);
+                
                 worker_fifo_write = open(request.client_named_pipe_path, O_WRONLY);
                 if (worker_fifo_write == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
@@ -147,12 +143,10 @@ void *worker_thread_func(void *arg) {
 
                 break;
             case 3: //Received request for box creation
-                printf("-----%d\n", code);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
-                printf("-----%s\n", request.client_named_pipe_path);
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                printf("-----%s\n", request.box_name);
+                
                 worker_fifo_write = open(request.client_named_pipe_path, O_WRONLY);
                 if (worker_fifo_write == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
@@ -163,12 +157,10 @@ void *worker_thread_func(void *arg) {
             
                 break;
             case 5: //Received request for box removal
-                printf("-----%d\n", code);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
-                printf("-----%s\n", request.client_named_pipe_path);
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                printf("-----%s\n", request.box_name);
+                
                 worker_fifo_write = open(request.client_named_pipe_path, O_WRONLY);
                 if (worker_fifo_write == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
