@@ -116,6 +116,7 @@ void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
     long unsigned int offset = 0;
     ssize_t bytes_read;
+    ssize_t bytes_written;
     uint8_t code = 0;
     Request request;
     Box_Response box_reponse;
@@ -128,7 +129,6 @@ void *worker_thread_func(void *arg) {
     int worker_fifo_write;
     int worker_fifo_read;
     BoxData *box_data;
-    ssize_t bytes_written;
 
     while (!stop_workers) {
         pthread_t thread_id = pthread_self();//TODO
@@ -191,7 +191,18 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                
+                sprintf(new_box_name, "/%s", request.box_name);
+                int subscriber_file_handle = tfs_open(new_box_name, 0);
+                //ler as mensagens todas que ja la estao
+                // entrar em espera dependendo de uma variavel de condição e ler quando eal recebe signal
+                //como acabar? se a outra fechar a ponta de leitura esta recebe sigpipe
+                //
+                bytes_read = tfs_read(subscriber_file_handle, message_buffer, sizeof(message.message));
+
+                if (bytes_read < 0){//error
+                        fprintf(stderr, "[ERR]: read failed1\n");
+                        exit(EXIT_FAILURE);
+                    }
                 //[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
                 
 

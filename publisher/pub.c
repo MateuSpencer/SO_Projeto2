@@ -42,7 +42,6 @@ int main(int argc, char **argv){
         strcpy(request.box_name, argv[3]);
         send_request( request, register_fifo_write);
         
-        //Como saber se foi aceite ou nao?
         //open worker_pipe for writing
         int worker_fifo_write = open(argv[2], O_WRONLY);
         if (worker_fifo_write == -1){
