@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <string.h>
+#include <assert.h>
 
 #include "../fs/operations.h"
 #include "logging.h"
@@ -19,6 +20,8 @@ void *worker_thread_func(void *arg);
 int main(int argc, char **argv){
 
     if(argc == 3){
+        //Initialize TFS
+        assert(tfs_init(NULL) != -1);
         pc_queue_t queue;
         int num_threads = atoi(argv[2]);
         if (pcq_create(&queue, (size_t)(2*num_threads)) != 0){
@@ -55,6 +58,15 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
+        //open one end with a ghost writer so it always has a writer
+        int register_fifo_ghost_writer = open(argv[1], O_WRONLY);
+        if (register_fifo_read == -1){
+            fprintf(stderr, "[ERR]: open failed\n");
+            exit(EXIT_FAILURE);
+        }
+        register_fifo_ghost_writer++;//TODO: unused
+        register_fifo_ghost_writer--;
+
         char buffer[sizeof(Request)];
         ssize_t bytes_read;
         int end = 0;
@@ -99,9 +111,12 @@ void *worker_thread_func(void *arg) {
     long unsigned int offset = 0;
     uint8_t code = 0;
     Request request;
+    Box_Response box_reponse;
     int worker_fifo_write;
     int worker_fifo_read;
     while (!stop_workers) {
+        pthread_t thread_id = pthread_self();//TODO
+        
         // Dequeue a request
         char *request_buffer = (char*)pcq_dequeue(queue);
         // Process the request
@@ -146,15 +161,25 @@ void *worker_thread_func(void *arg) {
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                
+                printf("Thread ID: %ld\n", thread_id);
                 worker_fifo_write = open(request.client_named_pipe_path, O_WRONLY);
                 if (worker_fifo_write == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                //tfs_open(nome_do_worker_pipe., TFS_O_CREAT);
-                //Resposta: [ code = 4 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ] 
-            
+                char new_box_name[40];
+                sprintf(new_box_name, "/%s", request.box_name);
+                box_reponse.code = 4;
+                int f = tfs_open(new_box_name, TFS_O_CREAT);
+                
+                if(f == -1){
+                    box_reponse.return_code = -1;
+                    strcpy(box_reponse.error_message, "ganda erro");//TODO
+                }else{
+                    box_reponse.return_code = 0;
+                    strcpy(box_reponse.error_message, "\0");
+                }                
+                send_box_response(box_reponse, worker_fifo_write);
                 break;
             case 5: //Received request for box removal
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));

@@ -74,9 +74,11 @@ int main(int argc, char **argv) {
             long unsigned int offset = 0;
             //read the serialized message
             ssize_t bytes_read = read_fifo(worker_fifo_read, response_buffer, sizeof(Box_Response));
-            bytes_read++;//TODO: because of unused
+            if(bytes_read <0 ){
+                //TODO
+            }
             //read the message code
-            memcpy(&code, response_buffer, sizeof(code));
+            memcpy(&box_response.code, response_buffer, sizeof(box_response.code));
             offset += sizeof(code);
             memcpy(&box_response.return_code, response_buffer + offset, sizeof(box_response.return_code));
             if(box_response.return_code == 0){
@@ -85,9 +87,9 @@ int main(int argc, char **argv) {
                 //read the return error message
                 offset += sizeof(box_response.return_code);
                 remove_strings_from_buffer(response_buffer + offset, box_response.error_message , sizeof(box_response.error_message));
-                fprintf(stdout, "ERROR %s\n", box_response.error_message);
+                fprintf(stdout, "ERROR: %s\n", box_response.error_message);
             }else{
-                printf("UNKNOWN BOX RESPONSE");
+                printf("UNKNOWN BOX RESPONSE\n");
             }
             close(worker_fifo_read);
             close(register_fifo_write);

@@ -48,3 +48,20 @@ void send_request(Request request, int fifo){
         exit(EXIT_FAILURE);
     }
 }
+
+
+void send_box_response(Box_Response response, int fifo){
+    long unsigned int offset = 0;
+    char response_buffer [sizeof(Box_Response)];
+    memcpy(response_buffer, &response.code, sizeof(response.code));
+    offset += sizeof(response.code);
+    memcpy(response_buffer + offset, &response.return_code, sizeof(response.return_code));
+    offset += sizeof(response.return_code);
+    store_string_in_buffer(response_buffer + offset, response.error_message, sizeof(response.error_message));
+    // Write the serialized message to the FIFO
+    ssize_t bytes_written = write(fifo, response_buffer, sizeof(response_buffer));
+    if (bytes_written < 0) {
+        fprintf(stderr, "[ERR]: write failed\n");
+        exit(EXIT_FAILURE);
+    }
+}

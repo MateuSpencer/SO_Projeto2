@@ -43,4 +43,6 @@ void remove_strings_from_buffer(char* buffer, char* str1, size_t space) ;
 
 void send_request(Request request, int fifo);
 
+void send_box_response(Box_Response reponse, int fifo);
+
 #endif
