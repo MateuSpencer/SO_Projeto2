@@ -125,13 +125,12 @@ void *worker_thread_func(void *arg) {
         char *request_buffer = (char*)pcq_dequeue(queue);
         offset = 0;
         //ler so o primerio byte
+        printf("Thread ID: %ld\n", thread_id);
         memcpy(&code, request_buffer, sizeof(code));
         offset += sizeof(code);
-
         // Process the request
         switch (code){
             case 1: //Received request for publisher registration                
-                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
@@ -142,27 +141,29 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                
-                //caso seja preciso nao aceitar pq ja ha um publisher, por if a volta disto tudo para ir ogo para o close e dar SIGPIPE
-                bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
-                bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
-                while(bytes_read > 0){
-                    memcpy(&message.code, message_buffer, sizeof(message.code));
-                    offset = 0;
-                    offset += sizeof(message.code);
-                    remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));//Vem com um \n
-                    printf("--%s--\n",message.message);//TODO
+                //Adicionar / ao inicio do nome da Box e tentar abrira a box
+                sprintf(new_box_name, "/%s", request.box_name);
+                int publisher_file_handle = tfs_open(new_box_name, TFS_O_APPEND);
+                printf("return do open %d\n", publisher_file_handle);
+                if(publisher_file_handle >= 0){//ir logo para o close e dar SIGPIPE
+                    bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
-                }
-                if (bytes_read < 0){//error
-                    fprintf(stderr, "[ERR]: read failed1\n");
-                    exit(EXIT_FAILURE);
+                    while(bytes_read > 0){
+                        memcpy(&message.code, message_buffer, sizeof(message.code));
+                        offset = 0;
+                        offset += sizeof(message.code);
+                        remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));//Vem com um \n
+                        printf("--%s--\n",message.message);//TODO
+                        tfs_write(publisher_file_handle, message.message, sizeof(message.message));
+                        //ler proxima mensagem
+                        bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
+                    }
+                    if (bytes_read < 0){//error
+                        fprintf(stderr, "[ERR]: read failed1\n");
+                        exit(EXIT_FAILURE);
+                    }
                 }
                 close(worker_fifo_read);
-                    
-                //recebe estas e guarda na caixa
-                //[ code = 9 (uint8_t) ] | [ message (char[1024]) ]
-                
                 break;
             case 2: //Received request for subscriber registration
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
@@ -181,7 +182,6 @@ void *worker_thread_func(void *arg) {
 
                 break;
             case 3: //Received request for box creation
-                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
@@ -205,7 +205,6 @@ void *worker_thread_func(void *arg) {
                 send_box_response(box_reponse, worker_fifo_write);
                 break;
             case 5: //Received request for box removal
-                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));

@@ -63,6 +63,7 @@ int main(int argc, char **argv){
             memcpy(message_buffer, &message.code, sizeof(message.code));
             offset += sizeof(message.code);
             store_string_in_buffer(message_buffer + offset, line, sizeof(message.message));
+            //TODO: Devia garantir qu etem o \n no final, pq se for demasiado grande a função pode ter truncado
             bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
             if (bytes_written < 0) {
                 fprintf(stderr, "[ERR]: write failed\n");
