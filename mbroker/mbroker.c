@@ -12,8 +12,60 @@
 #include "../protocol/protocol.h"
 #include "producer-consumer.h"
 
-volatile sig_atomic_t stop_workers = 0;
 //volatile sig_atomic_t to make it thread safe
+volatile sig_atomic_t stop_workers = 0;
+
+//Struct for box data
+typedef struct {
+    char box_name[32];
+    int n_publishers;
+    int n_subscribers;
+    pthread_cond_t box_new_message_cond;
+    struct node *next;
+}BoxData;
+//Struct to support list of boxes
+typedef struct{
+    struct node *head;
+    struct node *tail;
+}BoxList;
+
+void insert_at_beginning(BoxList *list, char* box_name, int n_publishers, int n_subscribers) {
+    BoxData *new_box_data = (BoxData*)malloc(sizeof(BoxData));
+    pthread_cond_init(&new_box_data->box_new_message_cond, NULL);
+    strcpy(new_box_data->box_name, box_name);
+    new_box_data->n_publishers = n_publishers;
+    new_box_data->n_subscribers = n_subscribers;
+    new_box_data->next = list->head;
+    list->head = new_box_data;
+    if(list->tail == NULL) {
+        list->tail = new_box_data;
+    }
+}
+
+void delete_node(BoxList *list, char* box_name) {
+    BoxData *temp = list->head;
+    BoxData *prev = NULL;
+    //node to be deleted is the head
+    if (temp != NULL && strcmp(box_name, temp->box_name) == 0) {
+        list->head = temp->next;
+        free(temp);
+        return;
+    }
+    //node to be deleted is not the head
+    while (temp != NULL && strcmp(box_name, temp->box_name) != 0) {
+        prev = temp;
+        temp = temp->next;
+    }
+    //the node was not found
+    if (temp == NULL) {
+        return;
+    }
+    // Unlink the node from the list
+    prev->next = temp->next;
+    if(temp == list->tail) list->tail = prev; 
+    free(temp);
+}
+
 
 void *worker_thread_func(void *arg);
 
