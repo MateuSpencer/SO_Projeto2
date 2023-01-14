@@ -80,6 +80,7 @@ int main(int argc, char **argv) {
             //read the message code
             memcpy(&box_response.code, response_buffer, sizeof(box_response.code));
             offset += sizeof(code);
+            //TODO verificar se o codigo é 4 ou 6
             memcpy(&box_response.return_code, response_buffer + offset, sizeof(box_response.return_code));
             if(box_response.return_code == 0){
                 fprintf(stdout, "OK\n");

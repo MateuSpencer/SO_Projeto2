@@ -112,6 +112,7 @@ void *worker_thread_func(void *arg) {
     uint8_t code = 0;
     Request request;
     Box_Response box_reponse;
+    char new_box_name[40];
     int worker_fifo_write;
     int worker_fifo_read;
     while (!stop_workers) {
@@ -158,23 +159,23 @@ void *worker_thread_func(void *arg) {
 
                 break;
             case 3: //Received request for box creation
+                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
-                printf("Thread ID: %ld\n", thread_id);
                 worker_fifo_write = open(request.client_named_pipe_path, O_WRONLY);
                 if (worker_fifo_write == -1){
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                char new_box_name[40];
+                
                 sprintf(new_box_name, "/%s", request.box_name);
                 box_reponse.code = 4;
-                int f = tfs_open(new_box_name, TFS_O_CREAT);
+                int create = tfs_open(new_box_name, TFS_O_CREAT);
                 
-                if(f == -1){
+                if(create == -1){
                     box_reponse.return_code = -1;
-                    strcpy(box_reponse.error_message, "ganda erro");//TODO
+                    strcpy(box_reponse.error_message, "ganda erro a criar");//TODO
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
@@ -182,6 +183,7 @@ void *worker_thread_func(void *arg) {
                 send_box_response(box_reponse, worker_fifo_write);
                 break;
             case 5: //Received request for box removal
+                printf("Thread ID: %ld\n", thread_id);
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
@@ -191,9 +193,19 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                //Resposta: [ code = 6 (uint8_t) ] | [ return_code (int32_t) ] | [ error_message (char[1024]) ]
+                sprintf(new_box_name, "/%s", request.box_name);
+                box_reponse.code = 6;
 
-            
+                int remove = tfs_unlink(new_box_name);//TODO: Potencialmente mudar o unlink para apagar ficheiro mesmo que tenha leitores a ler
+                
+                if(remove == -1){
+                    box_reponse.return_code = -1;
+                    strcpy(box_reponse.error_message, "ganda erro a remover");//TODO
+                }else{
+                    box_reponse.return_code = 0;
+                    strcpy(box_reponse.error_message, "\0");
+                }                
+                send_box_response(box_reponse, worker_fifo_write);            
                 break;
             case 7: //Received request for box listing
 
