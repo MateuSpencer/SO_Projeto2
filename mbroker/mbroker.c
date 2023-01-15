@@ -111,6 +111,9 @@ int main(int argc, char **argv){
     return -1;
 }
 
+void sigpipe_handler(int signum) {
+    (void)signum;
+}
 
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
@@ -196,6 +199,9 @@ void *worker_thread_func(void *arg) {
                 close(worker_fifo_read);
                 break;
             case 2: //Received request for subscriber registration
+                if (signal(SIGPIPE, sigpipe_handler) == SIG_ERR) {
+                    exit(EXIT_FAILURE);
+                }
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
                 offset += sizeof(request.client_named_pipe_path);
                 remove_strings_from_buffer(request_buffer + offset, request.box_name , sizeof(request.box_name));
@@ -248,9 +254,8 @@ void *worker_thread_func(void *arg) {
                         //serialize message and send
                         remove_first_string_from_buffer(full_box_buffer + (offset-1), message.message, (sizeof(full_box_buffer) - offset));
                         store_string_in_buffer(message_buffer + offset, message.message, sizeof(message.message));
-                        printf("waiting to write\n");
+                        bytes_written = 0;
                         bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
-                        printf("%ld bytes written\n", bytes_written);
                     }
                     box_data->n_subscribers--;
                 }
