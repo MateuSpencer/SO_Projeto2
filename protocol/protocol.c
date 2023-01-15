@@ -132,7 +132,7 @@ BoxData* merge_sort_boxdata_list(BoxData* head) {
         return head;
     }
 
-    // Split the list in half
+    // Dividir a lista a meio
     BoxData* slow = head;
     BoxData* fast = head->next;
     while (fast != NULL && fast->next != NULL) {
@@ -142,11 +142,11 @@ BoxData* merge_sort_boxdata_list(BoxData* head) {
     BoxData* head2 = slow->next;
     slow->next = NULL;
 
-    // Recursively sort the two halves
+    // ordenar recursivamente as duas metades
     BoxData* left = merge_sort_boxdata_list(head);
     BoxData* right = merge_sort_boxdata_list(head2);
 
-    // Merge the two sorted halves
+    // unir as duas metades ordenadas
     BoxData dummy;
     BoxData* tail = &dummy;
     while (left != NULL && right != NULL) {

@@ -122,7 +122,7 @@ int main(int argc, char **argv){
             return 1;
         }*/
         tfs_destroy();
-        
+        pthread_mutex_destroy(&box_list.box_list_lock);
         return 0;
     }
 
@@ -180,6 +180,7 @@ void *worker_thread_func(void *arg) {
                 //Adicionar / ao inicio do nome da Box e tentar abrira a box
                 sprintf(new_box_name, "/%s", request.box_name);
                 int publisher_file_handle = tfs_open(new_box_name, TFS_O_APPEND);
+                //encontar a box pedida
                 pthread_mutex_lock(&box_list.box_list_lock);
                 box_data = find_box(box_list.head, new_box_name);
                 pthread_mutex_unlock(&box_list.box_list_lock);
@@ -187,7 +188,7 @@ void *worker_thread_func(void *arg) {
                     box_data->n_publishers = 1;
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
-                    while(bytes_read > 0){
+                    while(bytes_read > 0){//escrever as mensagens qu evem pelo pipe
                         memcpy(&message.code, message_buffer, sizeof(message.code));
                         offset = 0;
                         offset += sizeof(message.code);
@@ -205,7 +206,7 @@ void *worker_thread_func(void *arg) {
                         //aumentar tamanho da caixa
                         size_t message_len = strlen(message.message);
                         box_data->box_size += message_len;
-                        pthread_cond_signal(&box_data->box_condvar);
+                        pthread_cond_broadcast(&box_data->box_condvar);
                         pthread_mutex_unlock(&box_data->box_condvar_lock);
                         //ler proxima mensagem
                         bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
@@ -231,7 +232,9 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
+                //adicionar / ao inicio do nome da caixa para encontrar
                 sprintf(new_box_name, "/%s", request.box_name);
+                //obter caixa pedida
                 pthread_mutex_lock(&box_list.box_list_lock);
                 box_data = find_box(box_list.head, new_box_name);
                 pthread_mutex_unlock(&box_list.box_list_lock);
@@ -304,7 +307,9 @@ void *worker_thread_func(void *arg) {
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
                     //adicionar box a lista
+                    pthread_mutex_lock(&box_list.box_list_lock);
                     insert_at_beginning(&box_list, new_box_name, 0, 0, 0);
+                    pthread_mutex_unlock(&box_list.box_list_lock);
                 }                
                 send_box_response(box_reponse, worker_fifo_write);
                 close(worker_fifo_write);
@@ -330,7 +335,9 @@ void *worker_thread_func(void *arg) {
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
                     //apagar box da lista
+                    pthread_mutex_lock(&box_list.box_list_lock);
                     delete_box(&box_list, new_box_name);
+                    pthread_mutex_unlock(&box_list.box_list_lock);
                 }                
                 send_box_response(box_reponse, worker_fifo_write);   
                 close(worker_fifo_write);         
@@ -342,9 +349,10 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
-                pthread_mutex_lock(&box_list.box_list_lock);
+                pthread_mutex_lock(&box_list.box_list_lock);//bloquear lista para garantir que nao se altera durante a listagem
                 box_data = box_list.head;
-                while(box_data != NULL){
+                while(box_data != NULL){//iterar por todas as caixas da lista
+                    //adquirir todas as informações e serializa-las
                     offset = 0;
                     listing_response.code = 8;
                     memcpy(listing_buffer, &listing_response.code, sizeof(listing_response.code));
@@ -373,7 +381,7 @@ void *worker_thread_func(void *arg) {
                         exit(EXIT_FAILURE);
                     }
 
-                    box_data = box_data->next;
+                    box_data = box_data->next;//passar para proxima caixa
                 }
                 pthread_mutex_unlock(&box_list.box_list_lock);
                 close(worker_fifo_write);
