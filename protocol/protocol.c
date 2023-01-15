@@ -5,7 +5,8 @@
 
 void insert_at_beginning(BoxList *list, char* box_name, uint64_t box_size, uint64_t n_publishers, uint64_t n_subscribers) {
     BoxData *new_box_data = (BoxData *)malloc(sizeof(BoxData));
-    pthread_cond_init(&new_box_data->box_new_message_cond, NULL);
+    pthread_mutex_init(&new_box_data->box_condvar_lock, NULL);
+    pthread_cond_init(&new_box_data->box_condvar, NULL);
     strcpy(new_box_data->box_name, box_name);
     new_box_data->box_size = box_size;
     new_box_data->n_publishers = n_publishers;
@@ -79,6 +80,18 @@ void remove_strings_from_buffer(char* buffer, char* str1, size_t space) {
         str1[i] = buffer[i];
     }
     str1[i] = '\0';
+}
+
+size_t remove_first_string_from_buffer(char* buffer, char* str1, size_t max_space) {
+    size_t i;
+    for (i = 0; i < max_space; i++) {
+        if (buffer[i] == '\0') {
+            break;
+        }
+        str1[i] = buffer[i];
+    }
+    str1[i] = '\0';
+    return i + 1;
 }
 
 void send_request(Request request, int fifo){

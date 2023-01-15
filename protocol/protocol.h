@@ -42,7 +42,8 @@ typedef struct boxdata{
     uint64_t box_size;
     uint64_t n_publishers;
     uint64_t n_subscribers;
-    pthread_cond_t box_new_message_cond;
+    pthread_mutex_t box_condvar_lock;
+    pthread_cond_t box_condvar;
     struct boxdata *next;
 }BoxData;
 //Struct to support list of boxes
@@ -62,7 +63,9 @@ ssize_t read_fifo(int fifo, char *buffer, size_t n_bytes);
 
 void store_string_in_buffer(char* buffer, char* str1, size_t space);
 
-void remove_strings_from_buffer(char* buffer, char* str1, size_t space) ;
+void remove_strings_from_buffer(char* buffer, char* str1, size_t space);
+
+size_t remove_first_string_from_buffer(char* buffer, char* str1, size_t max_space);
 
 void send_request(Request request, int fifo);
 

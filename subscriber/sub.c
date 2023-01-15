@@ -12,7 +12,7 @@
 int end;//declared globally so that the signal treatment can exit the loop and consequently the program
 
 void sigint_handler(int signum) {
-    printf("SIGINT: %d\n", signum);
+    (void)signum;
     end = 1;
 }
 
@@ -56,28 +56,32 @@ int main(int argc, char **argv) {
         Message message;
         char message_buffer[sizeof(Message)];
         long unsigned int offset = 0;
-        ssize_t bytes_read = read_fifo(worker_fifo_read, message_buffer, sizeof(message_buffer));
-        memcpy(&message.code, message_buffer, sizeof(message.code));
-        offset += sizeof(message.code);
-        remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
         end = 0;
-        while(end == 0){//will exit once the pipe writer exits
-            if( message.code != 10 ){
-                printf("Invalid type of message received from box - %d\n",message.code);
-            }else{
-                fprintf(stdout, "%s\n", message.message);
-                msgCtr++;
-            }
-            offset = 0;
+        ssize_t bytes_read = read_fifo(worker_fifo_read, message_buffer, sizeof(message_buffer));//ignorar o 0 enviado pelo teste ou entao causar SIGPIPE
+        if(strcmp(message_buffer, "test") == 0){//read test correctly
             bytes_read = read_fifo(worker_fifo_read, message_buffer, sizeof(message_buffer));
-            bytes_read++;//TODO unused
             memcpy(&message.code, message_buffer, sizeof(message.code));
             offset += sizeof(message.code);
             remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
+            while(end == 0){//will exit once the pipe writer exits
+                if( message.code != 10 ){
+                    printf("Invalid type of message received from box - %d\n",message.code);
+                }else{
+                    fprintf(stdout, "%s\n", message.message);
+                    msgCtr++;
+                }
+                offset = 0;
+                bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
+                if(bytes_read == 0) break;
+                bytes_read++;//TODO unused
+                memcpy(&message.code, message_buffer, sizeof(message.code));
+                offset += sizeof(message.code);
+                remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
+            }
+        }else{
+            printf("Failed to connect to Box\n");
         }
-        
-
-        fprintf(stdout, "%d\n", msgCtr);
+        fprintf(stdout, "\n%d\n", msgCtr);
         close(worker_fifo_read);
         close(register_fifo_write);
         return 0;

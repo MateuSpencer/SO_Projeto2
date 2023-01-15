@@ -115,6 +115,8 @@ int main(int argc, char **argv){
 void *worker_thread_func(void *arg) {
     pc_queue_t *queue = (pc_queue_t*)arg;
     long unsigned int offset = 0;
+    size_t offset_aux;
+    size_t prev_offset_aux;
     ssize_t bytes_read;
     ssize_t bytes_written;
     uint8_t code = 0;
@@ -129,6 +131,7 @@ void *worker_thread_func(void *arg) {
     int worker_fifo_write;
     int worker_fifo_read;
     BoxData *box_data;
+    char full_box_buffer[1024];
 
     while (!stop_workers) {
         pthread_t thread_id = pthread_self();//TODO
@@ -166,15 +169,26 @@ void *worker_thread_func(void *arg) {
                         offset = 0;
                         offset += sizeof(message.code);
                         remove_strings_from_buffer(message_buffer + offset, message.message , sizeof(message.message));
-                        tfs_write(publisher_file_handle, message.message, sizeof(message.message));// escrever um \0 a seguir? ou ja vem com isso? ou nem preciso pq vou sempre ler o mm tamanho
+                        pthread_mutex_lock(&box_data->box_condvar_lock);
+                        bytes_written = tfs_write(publisher_file_handle, message.message, (strlen(message.message) + 1));// escrever um \0 a seguir? ou ja vem com isso? ou nem preciso pq vou sempre ler o mm tamanho
+                        if(bytes_written < 0){
+                            fprintf(stderr, "[ERR]: TFS write failed\n");
+                            break;
+                        }
+                        if(bytes_written == 0){
+                            fprintf(stderr, "BOX FULL\n");
+                            break;
+                        }
                         //aumentar tamanho da caixa
                         size_t message_len = strlen(message.message);
                         box_data->box_size += message_len;
+                        pthread_cond_signal(&box_data->box_condvar);
+                        pthread_mutex_unlock(&box_data->box_condvar_lock);
                         //ler proxima mensagem
                         bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                     }
                     if (bytes_read < 0){//error
-                        fprintf(stderr, "[ERR]: read failed1\n");
+                        fprintf(stderr, "[ERR]: read failed\n");
                         exit(EXIT_FAILURE);
                     }
                     box_data->n_publishers = 0;
@@ -192,20 +206,56 @@ void *worker_thread_func(void *arg) {
                     exit(EXIT_FAILURE);
                 }
                 sprintf(new_box_name, "/%s", request.box_name);
+                box_data = find_box(&box_list, new_box_name);
                 int subscriber_file_handle = tfs_open(new_box_name, 0);
-                //ler as mensagens todas que ja la estao
-                // entrar em espera dependendo de uma variavel de condição e ler quando eal recebe signal
-                //como acabar? se a outra fechar a ponta de leitura esta recebe sigpipe
-                //
-                bytes_read = tfs_read(subscriber_file_handle, message_buffer, sizeof(message.message));
-
-                if (bytes_read < 0){//error
-                        fprintf(stderr, "[ERR]: read failed1\n");
-                        exit(EXIT_FAILURE);
+                if(box_data != NULL && subscriber_file_handle > 0){
+                    char message_test[] = "test";
+                    bytes_written = write(worker_fifo_write, message_test, sizeof(message_test));//send a test message for the client to know if it was accepted in the box
+                    box_data->n_subscribers++;
+                    //ler as mensagens que ja estao na caixa
+                    bytes_read = tfs_read(subscriber_file_handle, full_box_buffer, sizeof(full_box_buffer));
+                    if (bytes_read < 0){//error
+                            fprintf(stderr, "[ERR]: TFS read failed\n");
+                            exit(EXIT_FAILURE);
                     }
-                //[ code = 10 (uint8_t) ] | [ message (char[1024]) ]
-                
-
+                    message.code = 10;
+                    memcpy(message_buffer, &message.code, sizeof(message.code));
+                    offset = sizeof(message.code);
+                    offset_aux = 0;
+                    while(offset_aux <= sizeof(full_box_buffer)){
+                        prev_offset_aux = offset_aux; 
+                        offset_aux += remove_first_string_from_buffer(full_box_buffer + offset_aux, message.message, (sizeof(full_box_buffer) - offset));
+                        if(offset_aux - prev_offset_aux == 1)break;
+                        store_string_in_buffer(message_buffer + offset, message.message, sizeof(message.message));
+                        bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
+                    }
+                    
+                    //Ficar a espera de mensagens
+                    uint64_t last_size = box_data->box_size;
+                    bytes_written = 1;//para entrar no loop
+                    while(bytes_written > 0){//Ficar a espera de mensagens, sair quando der erro a tentar escrevr uma mensagem para o cliente (é preciso que seja escrito algo na box)
+                        pthread_mutex_lock(&box_data->box_condvar_lock);
+                        while(box_data->box_size == last_size){
+                            pthread_cond_wait(&box_data->box_condvar, &box_data->box_condvar_lock);
+                        }
+                        bytes_read = tfs_read(subscriber_file_handle, full_box_buffer, sizeof(full_box_buffer));
+                        if (bytes_read < 0){//error
+                            fprintf(stderr, "[ERR]: TFS read failed\n");
+                            exit(EXIT_FAILURE);
+                        }
+                        last_size = box_data->box_size;
+                        pthread_mutex_unlock(&box_data->box_condvar_lock);
+                        //serialize message and send
+                        remove_first_string_from_buffer(full_box_buffer + (offset-1), message.message, (sizeof(full_box_buffer) - offset));
+                        store_string_in_buffer(message_buffer + offset, message.message, sizeof(message.message));
+                        printf("waiting to write\n");
+                        bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
+                        printf("%ld bytes written\n", bytes_written);
+                    }
+                    box_data->n_subscribers--;
+                }
+                printf("GONNA CLOSE\n");
+                close(worker_fifo_write);
                 break;
             case 3: //Received request for box creation
                 remove_strings_from_buffer(request_buffer + offset, request.client_named_pipe_path , sizeof(request.client_named_pipe_path));
