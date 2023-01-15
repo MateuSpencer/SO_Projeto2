@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
                 offset = 0;
                 memcpy(&listing_response.code, listing_response_buffer, sizeof(listing_response.code));
                 offset += sizeof(listing_response.code);
-                //TODO verificar se codigo esta correto
+                if(listing_response.code == 8){
                 memcpy(&listing_response.last, listing_response_buffer + offset, sizeof(listing_response.last));
                 offset += sizeof(listing_response.last);
                 remove_strings_from_buffer(listing_response_buffer + offset, listing_response.box_name , sizeof(listing_response.box_name));
@@ -95,6 +95,9 @@ int main(int argc, char **argv) {
                 memcpy(&listing_response.n_subscribers  , listing_response_buffer + offset, sizeof(listing_response.n_subscribers));
                 //adicionar informação na lista de boxes para ser ordenada
                 insert_at_beginning(&box_list_sort, listing_response.box_name,listing_response.box_size, listing_response.n_publishers, listing_response.n_subscribers );
+                }else{
+                    printf("UNKNOWN BOX LISTING RESPONSE\n");
+                }
                 //ler proxima caixa do fifo
                 bytes_read = read_fifo(worker_fifo_read, listing_response_buffer, sizeof(ListingResponse));
             }
@@ -174,22 +177,24 @@ int main(int argc, char **argv) {
             //read the serialized message
             bytes_read = read_fifo(worker_fifo_read, response_buffer, sizeof(Box_Response));
             if(bytes_read <0 ){
-                //TODO
+                fprintf(stderr, "[ERR]: NO RESPONSE\n");
+                exit(EXIT_FAILURE);
             }
             //read the message code
             memcpy(&box_response.code, response_buffer, sizeof(box_response.code));
             offset += sizeof(code);
-            //TODO verificar se o codigo é 4 ou 6
-            memcpy(&box_response.return_code, response_buffer + offset, sizeof(box_response.return_code));
-            if(box_response.return_code == 0){
-                fprintf(stdout, "OK\n");
-            }else if(box_response.return_code == -1){
-                //read the return error message
-                offset += sizeof(box_response.return_code);
-                remove_strings_from_buffer(response_buffer + offset, box_response.error_message , sizeof(box_response.error_message));
-                fprintf(stdout, "ERROR %s\n", box_response.error_message);
-            }else{
-                printf("UNKNOWN BOX RESPONSE\n");
+            if(box_response.code == 4 || box_response.code == 6){
+                memcpy(&box_response.return_code, response_buffer + offset, sizeof(box_response.return_code));
+                if(box_response.return_code == 0){
+                    fprintf(stdout, "OK\n");
+                }else if(box_response.return_code == -1){
+                    //read the return error message
+                    offset += sizeof(box_response.return_code);
+                    remove_strings_from_buffer(response_buffer + offset, box_response.error_message , sizeof(box_response.error_message));
+                    fprintf(stdout, "ERROR %s\n", box_response.error_message);
+                }else{
+                    printf("UNKNOWN BOX RETURN RESPONSE\n");
+                }
             }
             close(worker_fifo_read);
             if(unlink(pipe_name) == -1) {

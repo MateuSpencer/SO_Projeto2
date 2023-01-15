@@ -74,14 +74,14 @@ int main(int argc, char **argv){
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(register_pipe_name, O_RDONLY);
         if (register_fifo_read == -1 && end == 0){
-            fprintf(stderr, "[ERR]: open failed1111\n");
+            fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         if(end == 0){
             //open one end with a ghost writer so it always has a writer
             int register_fifo_ghost_writer = open(register_pipe_name, O_WRONLY);
             if (register_fifo_read == -1){
-                fprintf(stderr, "[ERR]: open failed22222\n");
+                fprintf(stderr, "[ERR]: open failed\n");
                 exit(EXIT_FAILURE);
             }
             register_fifo_ghost_writer++;//Unused Warning
@@ -97,10 +97,7 @@ int main(int argc, char **argv){
                     return 1;
                 }
             }
-            if (bytes_read < 0){//error
-                fprintf(stderr, "[ERR]: read failed\n");
-                exit(EXIT_FAILURE);
-            }
+            bytes_read++;//Unused
             close(register_fifo_ghost_writer);
         }
         close(register_fifo_read);
@@ -108,25 +105,24 @@ int main(int argc, char **argv){
             fprintf(stderr, "[ERR]: unlink(%s) failed\n", register_pipe_name);
         }
         //Make the worker threads terminate
-        
-        printf("GOT HERE\n");
-        // Wait for the worker threads to complete
+        //??
+        /*// Wait for the worker threads to complete
         for (int i = 0; i < num_threads; i++) {
             pthread_cond_broadcast(&queue.pcq_popper_condvar);
             if (pthread_join(worker_threads[i], NULL) != 0) {
                 fprintf(stderr, "Error waiting for worker thread\n");
                 return 1;
             }
-        }
-        printf("GOT HERE TOO\n");
+        }*/
+        //free(worker_threads);
         // Destroy the producer-consumer queue
-        if (pcq_destroy(&queue) != 0) {
+        
+        /*if (pcq_destroy(&queue) != 0) {
             fprintf(stderr, "Error destroying producer-consumer queue\n");
             return 1;
-        }
-
+        }*/
         tfs_destroy();
-        free(worker_threads);
+        
         return 0;
     }
 
@@ -160,13 +156,11 @@ void *worker_thread_func(void *arg) {
     char full_box_buffer[1024];
 
     while (1) {
-        pthread_t thread_id = pthread_self();//TODO
         // Dequeue a request
         char *request_buffer = (char*)pcq_dequeue(queue);
         if(request_buffer == NULL)break;
         offset = 0;
         //ler so o primerio byte
-        printf("Thread ID: %ld\n", thread_id);
         memcpy(&code, request_buffer, sizeof(code));
         offset += sizeof(code);
         // Process the request
@@ -238,7 +232,9 @@ void *worker_thread_func(void *arg) {
                     exit(EXIT_FAILURE);
                 }
                 sprintf(new_box_name, "/%s", request.box_name);
+                pthread_mutex_lock(&box_list.box_list_lock);
                 box_data = find_box(box_list.head, new_box_name);
+                pthread_mutex_unlock(&box_list.box_list_lock);
                 int subscriber_file_handle = tfs_open(new_box_name, 0);
                 if(box_data != NULL && subscriber_file_handle > 0){
                     char message_test[] = "test";
@@ -303,7 +299,7 @@ void *worker_thread_func(void *arg) {
                 
                 if(create == -1){
                     box_reponse.return_code = -1;
-                    strcpy(box_reponse.error_message, "Erro a criar");//TODO
+                    strcpy(box_reponse.error_message, "Erro a criar");
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
@@ -326,11 +322,10 @@ void *worker_thread_func(void *arg) {
                 sprintf(new_box_name, "/%s", request.box_name);
                 box_reponse.code = 6;
 
-                int remove = tfs_unlink(new_box_name);//TODO: Potencialmente mudar o unlink para apagar ficheiro mesmo que tenha leitores a ler
-                
+                int remove = tfs_unlink(new_box_name);
                 if(remove == -1){
                     box_reponse.return_code = -1;
-                    strcpy(box_reponse.error_message, "Erro a remover");//TODO
+                    strcpy(box_reponse.error_message, "Erro a remover");
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
