@@ -71,4 +71,6 @@ void send_request(Request request, int fifo);
 
 void send_box_response(Box_Response reponse, int fifo);
 
+BoxData* merge_sort_boxdata_list(BoxData* head);
+
 #endif

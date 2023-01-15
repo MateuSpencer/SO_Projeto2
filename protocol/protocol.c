@@ -125,3 +125,45 @@ void send_box_response(Box_Response response, int fifo){
         exit(EXIT_FAILURE);
     }
 }
+
+BoxData* merge_sort_boxdata_list(BoxData* head) {
+    // Base case: empty or single element list
+    if (head == NULL || head->next == NULL) {
+        return head;
+    }
+
+    // Split the list in half
+    BoxData* slow = head;
+    BoxData* fast = head->next;
+    while (fast != NULL && fast->next != NULL) {
+        slow = slow->next;
+        fast = fast->next->next;
+    }
+    BoxData* head2 = slow->next;
+    slow->next = NULL;
+
+    // Recursively sort the two halves
+    BoxData* left = merge_sort_boxdata_list(head);
+    BoxData* right = merge_sort_boxdata_list(head2);
+
+    // Merge the two sorted halves
+    BoxData dummy;
+    BoxData* tail = &dummy;
+    while (left != NULL && right != NULL) {
+        if (strcmp(left->box_name, right->box_name) < 0) {
+            tail->next = left;
+            left = left->next;
+        } else {
+            tail->next = right;
+            right = right->next;
+        }
+        tail = tail->next;
+    }
+    if (left != NULL) {
+        tail->next = left;
+    } else {
+        tail->next = right;
+    }
+
+    return dummy.next;
+}

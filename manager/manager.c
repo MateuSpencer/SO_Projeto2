@@ -106,8 +106,7 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             //ORDENAR
-
-            //TODO
+            box_list_sort.head = merge_sort_boxdata_list (box_list_sort.head);
 
             //imprimir todas as caixas
             box_data = box_list_sort.head;
