@@ -27,21 +27,24 @@ int main(int argc, char **argv) {
     if (signal(SIGPIPE, sigpipe_handler) == SIG_ERR) {
             exit(EXIT_FAILURE);
         }
-    if(argc == 4){
-        //TODO confirmar que é list
+    if(argc == 4 && strcmp(argv[3],"list") == 0){
+        char register_pipe_name [strlen(argv[1]) + 3];
+        sprintf(register_pipe_name, "../%s", argv[1]);
+        char pipe_name [strlen(argv[2]) + 3];
+        sprintf(pipe_name, "../%s", argv[2]);
         //Open register fifo for writing request
-        int register_fifo_write = open(argv[1], O_WRONLY);
+        int register_fifo_write = open(register_pipe_name, O_WRONLY);
         if (register_fifo_write == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         //Create worker fifo
-        if(access(argv[2], F_OK) == 0) {
-            if(unlink(argv[2]) == -1) {
-                fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[2]);
+        if(access(pipe_name, F_OK) == 0) {
+            if(unlink(pipe_name) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
             }
         }
-        if (mkfifo(argv[2], 0640) != 0) {
+        if (mkfifo(pipe_name, 0640) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed--\n");
             exit(EXIT_FAILURE);
         }
@@ -50,7 +53,7 @@ int main(int argc, char **argv) {
         listing_request.code = 7;
         memcpy(listing_buffer, &listing_request.code, sizeof(listing_request.code));
         offset += sizeof(listing_request.code);
-        strcpy(listing_request.client_named_pipe_path, argv[2]);
+        strcpy(listing_request.client_named_pipe_path, pipe_name);
         store_string_in_buffer(listing_buffer + offset, listing_request.client_named_pipe_path, sizeof(listing_request.client_named_pipe_path));
         ssize_t bytes_written = write(register_fifo_write, listing_buffer, sizeof(listing_buffer));
         if (bytes_written < 0) {
@@ -59,15 +62,16 @@ int main(int argc, char **argv) {
         }
         close(register_fifo_write);
         // Open pipe for reading (waits for someone to open it for writing)
-        int worker_fifo_read = open(argv[2], O_RDONLY);
+        int worker_fifo_read = open(pipe_name, O_RDONLY);
         if (worker_fifo_read == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         //lista para suportar toda a informação das caixas
-        BoxList box_list;
-        box_list.head = NULL;
-        box_list.tail = NULL;
+        BoxList box_list_sort;
+        box_list_sort.head = NULL;
+        box_list_sort.tail = NULL;
+        pthread_mutex_init(&box_list_sort.box_list_lock, NULL);
         //receber as respostas e por na lista para ordenar
         ListingResponse listing_response;
         char listing_response_buffer[sizeof(ListingResponse)];
@@ -88,7 +92,7 @@ int main(int argc, char **argv) {
                 offset += sizeof(listing_response.n_publishers );
                 memcpy(&listing_response.n_subscribers  , listing_response_buffer + offset, sizeof(listing_response.n_subscribers));
                 //adicionar informação na lista de boxes para ser ordenada
-                insert_at_beginning(&box_list, listing_response.box_name,listing_response.box_size, listing_response.n_publishers, listing_response.n_subscribers );
+                insert_at_beginning(&box_list_sort, listing_response.box_name,listing_response.box_size, listing_response.n_publishers, listing_response.n_subscribers );
 
                 bytes_read = read_fifo(worker_fifo_read, listing_response_buffer, sizeof(ListingResponse));
             }
@@ -101,7 +105,7 @@ int main(int argc, char **argv) {
             //TODO
 
             //imprimir todos
-            box_data = box_list.head;
+            box_data = box_list_sort.head;
             while(box_data != NULL){
                 fprintf(stdout, "%s %zu %zu %zu\n", box_data->box_name, box_data->box_size, box_data->n_publishers, box_data->n_subscribers);
                 box_data = box_data->next;
@@ -122,20 +126,24 @@ int main(int argc, char **argv) {
             code = 5;
         }
         if(code != 0){
+            char register_pipe_name [strlen(argv[1]) + 3];
+            sprintf(register_pipe_name, "../%s", argv[1]);
+            char pipe_name [strlen(argv[2]) + 3];
+            sprintf(pipe_name, "../%s", argv[2]);
             
             //Open register fifo for writing request
-            int register_fifo_write = open(argv[1], O_WRONLY);
+            int register_fifo_write = open(register_pipe_name, O_WRONLY);
             if (register_fifo_write == -1){
                 fprintf(stderr, "[ERR]: open failed\n");
                 exit(EXIT_FAILURE);
             }
             //Create worker fifo
-            if(access(argv[2], F_OK) == 0) {
-                if(unlink(argv[2]) == -1) {
-                    fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[2]);
+            if(access(pipe_name, F_OK) == 0) {
+                if(unlink(pipe_name) == -1) {
+                    fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
                 }
             }
-            if (mkfifo(argv[2], 0640) != 0) {
+            if (mkfifo(pipe_name, 0640) != 0) {
                 fprintf(stderr, "[ERR]: mkfifo failed--\n");
                 exit(EXIT_FAILURE);
             }
@@ -143,12 +151,12 @@ int main(int argc, char **argv) {
             //Create request message serialized buffer and send through pipe
             Request request;
             request.code = code;
-            strcpy(request.client_named_pipe_path, argv[2]);
+            strcpy(request.client_named_pipe_path, pipe_name);
             strcpy(request.box_name, argv[4]);
             send_request( request, register_fifo_write);
             
             // Open pipe for reading (waits for someone to open it for writing)
-            int worker_fifo_read = open(argv[2], O_RDONLY);
+            int worker_fifo_read = open(pipe_name, O_RDONLY);
             if (worker_fifo_read == -1){
                 fprintf(stderr, "[ERR]: open failed\n");
                 exit(EXIT_FAILURE);

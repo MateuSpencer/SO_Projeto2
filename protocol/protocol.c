@@ -18,8 +18,7 @@ void insert_at_beginning(BoxList *list, char* box_name, uint64_t box_size, uint6
     }
 }
 
-BoxData* find_box(BoxList *list, char* box_name) {
-    BoxData* current = list->head;
+BoxData* find_box(BoxData *current, char* box_name) {
     while (current != NULL) {
         if (strcmp(box_name, current->box_name) == 0){
             return current;

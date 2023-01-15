@@ -26,6 +26,9 @@ int main(int argc, char **argv){
     if(argc == 3){
         box_list.head = NULL;
         box_list.tail = NULL;
+        pthread_mutex_init(&box_list.box_list_lock, NULL);
+        char register_pipe_name [strlen(argv[1]) + 3];
+        sprintf(register_pipe_name, "../%s", argv[1]);
         //Initialize TFS
         assert(tfs_init(NULL) != -1);
         pc_queue_t queue;
@@ -34,13 +37,13 @@ int main(int argc, char **argv){
         fprintf(stderr, "Error creating producer-consumer queue\n");
         return 1;
         }
-        if(access(argv[1], F_OK) == 0) {
-            if(unlink(argv[1]) == -1) {
-                fprintf(stderr, "[ERR]: unlink(%s) failed\n", argv[1]);
+        if(access(register_pipe_name, F_OK) == 0) {
+            if(unlink(register_pipe_name) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", register_pipe_name);
             }
         }
         //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
-        if (mkfifo(argv[1], 0640) != 0) {
+        if (mkfifo(register_pipe_name, 0640) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed\n");
             exit(EXIT_FAILURE);
         }
@@ -59,13 +62,13 @@ int main(int argc, char **argv){
             }
         }
         // Open pipe for reading (waits for someone to open it for writing)
-        int register_fifo_read = open(argv[1], O_RDONLY);
+        int register_fifo_read = open(register_pipe_name, O_RDONLY);
         if (register_fifo_read == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
         }
         //open one end with a ghost writer so it always has a writer
-        int register_fifo_ghost_writer = open(argv[1], O_WRONLY);
+        int register_fifo_ghost_writer = open(register_pipe_name, O_WRONLY);
         if (register_fifo_read == -1){
             fprintf(stderr, "[ERR]: open failed\n");
             exit(EXIT_FAILURE);
@@ -162,10 +165,12 @@ void *worker_thread_func(void *arg) {
                 //Adicionar / ao inicio do nome da Box e tentar abrira a box
                 sprintf(new_box_name, "/%s", request.box_name);
                 int publisher_file_handle = tfs_open(new_box_name, TFS_O_APPEND);
-                box_data = find_box(&box_list, new_box_name);
+                pthread_mutex_lock(&box_list.box_list_lock);
+                box_data = find_box(box_list.head, new_box_name);
+                pthread_mutex_unlock(&box_list.box_list_lock);
                 if(box_data != NULL && publisher_file_handle >= 0 && box_data->n_publishers == 0 ){//ir logo para o close e dar SIGPIPE
-                    bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     box_data->n_publishers = 1;
+                    bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));
                     while(bytes_read > 0){
                         memcpy(&message.code, message_buffer, sizeof(message.code));
@@ -179,7 +184,7 @@ void *worker_thread_func(void *arg) {
                             break;
                         }
                         if(bytes_written == 0){
-                            fprintf(stderr, "BOX FULL\n");
+                            fprintf(stderr, "BOX %s FULL\n",new_box_name);
                             break;
                         }
                         //aumentar tamanho da caixa
@@ -212,7 +217,7 @@ void *worker_thread_func(void *arg) {
                     exit(EXIT_FAILURE);
                 }
                 sprintf(new_box_name, "/%s", request.box_name);
-                box_data = find_box(&box_list, new_box_name);
+                box_data = find_box(box_list.head, new_box_name);
                 int subscriber_file_handle = tfs_open(new_box_name, 0);
                 if(box_data != NULL && subscriber_file_handle > 0){
                     char message_test[] = "test";
@@ -257,9 +262,8 @@ void *worker_thread_func(void *arg) {
                         bytes_written = 0;
                         bytes_written = write(worker_fifo_write, message_buffer, sizeof(message_buffer));
                     }
-                    box_data->n_subscribers--;
+                    box_data->n_subscribers = box_data->n_subscribers - 1;
                 }
-                printf("GONNA CLOSE\n");
                 close(worker_fifo_write);
                 break;
             case 3: //Received request for box creation
@@ -278,7 +282,7 @@ void *worker_thread_func(void *arg) {
                 
                 if(create == -1){
                     box_reponse.return_code = -1;
-                    strcpy(box_reponse.error_message, "ganda erro a criar");//TODO
+                    strcpy(box_reponse.error_message, "Erro a criar");//TODO
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
@@ -305,7 +309,7 @@ void *worker_thread_func(void *arg) {
                 
                 if(remove == -1){
                     box_reponse.return_code = -1;
-                    strcpy(box_reponse.error_message, "ganda erro a remover");//TODO
+                    strcpy(box_reponse.error_message, "Erro a remover");//TODO
                 }else{
                     box_reponse.return_code = 0;
                     strcpy(box_reponse.error_message, "\0");
@@ -322,6 +326,7 @@ void *worker_thread_func(void *arg) {
                     fprintf(stderr, "[ERR]: open failed\n");
                     exit(EXIT_FAILURE);
                 }
+                pthread_mutex_lock(&box_list.box_list_lock);
                 box_data = box_list.head;
                 while(box_data != NULL){
                     offset = 0;
@@ -335,8 +340,7 @@ void *worker_thread_func(void *arg) {
                     }
                     memcpy(listing_buffer + offset, &listing_response.last, sizeof(listing_response.last));
                     offset += sizeof(listing_response.last);
-                    strcpy(box_data->box_name, box_data->box_name + 1);//retirar a / do inicio
-                    store_string_in_buffer(listing_buffer + offset, box_data->box_name, sizeof(box_data->box_name));
+                    store_string_in_buffer(listing_buffer + offset, box_data->box_name + 1, sizeof(box_data->box_name));
                     offset += sizeof(box_data->box_name);
                     listing_response.box_size = box_data->box_size;
                     memcpy(listing_buffer + offset, &listing_response.box_size, sizeof(listing_response.box_size));
@@ -355,6 +359,7 @@ void *worker_thread_func(void *arg) {
 
                     box_data = box_data->next;
                 }
+                pthread_mutex_unlock(&box_list.box_list_lock);
                 close(worker_fifo_write);
                 break;
             default:

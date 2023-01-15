@@ -50,12 +50,12 @@ typedef struct boxdata{
 typedef struct{
     BoxData *head;
     BoxData *tail;
-    //TODO precisa de um mutex
+    pthread_mutex_t box_list_lock;
 }BoxList;
 
 void insert_at_beginning(BoxList *list, char* box_name, uint64_t box_size, uint64_t n_publishers, uint64_t n_subscribers);
 
-BoxData* find_box(BoxList *list, char* box_name);
+BoxData* find_box(BoxData *current, char* box_name);
 
 void delete_box(BoxList *list, char* box_name);
 
