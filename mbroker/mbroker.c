@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <string.h>
 #include <assert.h>
+#include <pthread.h>
 
 #include "../fs/operations.h"
 #include "logging.h"
@@ -15,15 +16,24 @@
 
 void *worker_thread_func(void *arg);
 
-//volatile sig_atomic_t to make it thread safe
-volatile sig_atomic_t stop_workers = 0;
-
 //Global variable for list of boxes
 BoxList box_list;
+
+int end;//declared globally so that the signal treatment can exit the loop and consequently the program
+
+void sigint_handler(int signum) {
+    (void)signum;
+    end = 1;
+}
 
 int main(int argc, char **argv){
 
     if(argc == 3){
+        if (signal(SIGINT, sigint_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
+        end = 0;
+        //Initialize list
         box_list.head = NULL;
         box_list.tail = NULL;
         pthread_mutex_init(&box_list.box_list_lock, NULL);
@@ -31,24 +41,24 @@ int main(int argc, char **argv){
         sprintf(register_pipe_name, "../%s", argv[1]);
         //Initialize TFS
         assert(tfs_init(NULL) != -1);
+        //Initialize queue
         pc_queue_t queue;
         int num_threads = atoi(argv[2]);
         if (pcq_create(&queue, (size_t)(2*num_threads)) != 0){
         fprintf(stderr, "Error creating producer-consumer queue\n");
         return 1;
         }
+        //Check if pipe_name already exists
         if(access(register_pipe_name, F_OK) == 0) {
-            if(unlink(register_pipe_name) == -1) {
-                fprintf(stderr, "[ERR]: unlink(%s) failed\n", register_pipe_name);
-            }
+            fprintf(stderr, "[ERR]: %s pipe_name alreay in use\n", argv[1]);
+            exit(EXIT_FAILURE);
         }
-        //criar register fifo: S_IWUSR(read permision for owner), S_IWOTH(write permisiions for others) - maybe other permissions needed
+        //criar register fifo
         if (mkfifo(register_pipe_name, 0640) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed\n");
             exit(EXIT_FAILURE);
         }
         // Dynamically allocate memory for the thread array
-        
         pthread_t *worker_threads = malloc((unsigned long int)num_threads * sizeof(pthread_t));
         if (worker_threads == NULL) {
             fprintf(stderr, "Error allocating memory for threads\n");
@@ -63,49 +73,59 @@ int main(int argc, char **argv){
         }
         // Open pipe for reading (waits for someone to open it for writing)
         int register_fifo_read = open(register_pipe_name, O_RDONLY);
-        if (register_fifo_read == -1){
-            fprintf(stderr, "[ERR]: open failed\n");
+        if (register_fifo_read == -1 && end == 0){
+            fprintf(stderr, "[ERR]: open failed1111\n");
             exit(EXIT_FAILURE);
         }
-        //open one end with a ghost writer so it always has a writer
-        int register_fifo_ghost_writer = open(register_pipe_name, O_WRONLY);
-        if (register_fifo_read == -1){
-            fprintf(stderr, "[ERR]: open failed\n");
-            exit(EXIT_FAILURE);
-        }
-        register_fifo_ghost_writer++;//TODO: unused
-        register_fifo_ghost_writer--;
-
-        char buffer[sizeof(Request)];
-        ssize_t bytes_read;
-        int end = 0;
-        while(end == 0){
-            bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
-            if (pcq_enqueue(&queue, buffer) != 0) {
-                fprintf(stderr, "Error enqueuing request\n");
-                return 1;
+        if(end == 0){
+            //open one end with a ghost writer so it always has a writer
+            int register_fifo_ghost_writer = open(register_pipe_name, O_WRONLY);
+            if (register_fifo_read == -1){
+                fprintf(stderr, "[ERR]: open failed22222\n");
+                exit(EXIT_FAILURE);
             }
-        }
-        if (bytes_read < 0){//error
-            fprintf(stderr, "[ERR]: read failed1\n");
-            exit(EXIT_FAILURE);
+            register_fifo_ghost_writer++;//Unused Warning
+            register_fifo_ghost_writer--;
+            //recieve requests and put them in the queue
+            char buffer[sizeof(Request)];
+            ssize_t bytes_read = 0;
+            
+            while(end == 0){
+                bytes_read = read(register_fifo_read, buffer, sizeof(buffer));
+                if (pcq_enqueue(&queue, buffer) != 0) {
+                    fprintf(stderr, "Error enqueuing request\n");
+                    return 1;
+                }
+            }
+            if (bytes_read < 0){//error
+                fprintf(stderr, "[ERR]: read failed\n");
+                exit(EXIT_FAILURE);
+            }
+            close(register_fifo_ghost_writer);
         }
         close(register_fifo_read);
-
+        if(unlink(register_pipe_name) == -1) {
+            fprintf(stderr, "[ERR]: unlink(%s) failed\n", register_pipe_name);
+        }
         //Make the worker threads terminate
-        stop_workers = 1;
+        
+        printf("GOT HERE\n");
         // Wait for the worker threads to complete
         for (int i = 0; i < num_threads; i++) {
+            pthread_cond_broadcast(&queue.pcq_popper_condvar);
             if (pthread_join(worker_threads[i], NULL) != 0) {
                 fprintf(stderr, "Error waiting for worker thread\n");
                 return 1;
             }
         }
+        printf("GOT HERE TOO\n");
         // Destroy the producer-consumer queue
         if (pcq_destroy(&queue) != 0) {
             fprintf(stderr, "Error destroying producer-consumer queue\n");
             return 1;
         }
+
+        tfs_destroy();
         free(worker_threads);
         return 0;
     }
@@ -139,10 +159,11 @@ void *worker_thread_func(void *arg) {
     BoxData *box_data;
     char full_box_buffer[1024];
 
-    while (!stop_workers) {
+    while (1) {
         pthread_t thread_id = pthread_self();//TODO
         // Dequeue a request
         char *request_buffer = (char*)pcq_dequeue(queue);
+        if(request_buffer == NULL)break;
         offset = 0;
         //ler so o primerio byte
         printf("Thread ID: %ld\n", thread_id);
@@ -168,7 +189,7 @@ void *worker_thread_func(void *arg) {
                 pthread_mutex_lock(&box_list.box_list_lock);
                 box_data = find_box(box_list.head, new_box_name);
                 pthread_mutex_unlock(&box_list.box_list_lock);
-                if(box_data != NULL && publisher_file_handle >= 0 && box_data->n_publishers == 0 ){//ir logo para o close e dar SIGPIPE
+                if(box_data != NULL && publisher_file_handle >= 0 && box_data->n_publishers == 0 ){//ir logo para o close para dar SIGPIPE
                     box_data->n_publishers = 1;
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));// para o teste caso nao tenha closed, ignorar o 0 mandado
                     bytes_read = read(worker_fifo_read, message_buffer, sizeof(message_buffer));

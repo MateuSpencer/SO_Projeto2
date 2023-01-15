@@ -4,7 +4,6 @@
 
 #include "producer-consumer.h"
 
-//TODO: verificar se os mutex foram bem inicializados e destruidos (usar Macro?)
 int pcq_create(pc_queue_t *queue, size_t capacity) {
     // Allocate memory for the queue buffer
     queue->pcq_buffer = malloc(capacity * sizeof(void*));

@@ -28,10 +28,16 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
     if(argc == 4 && strcmp(argv[3],"list") == 0){
+        //Append "../" to the beggining of the names to store worker pipes in a common place
         char register_pipe_name [strlen(argv[1]) + 3];
         sprintf(register_pipe_name, "../%s", argv[1]);
         char pipe_name [strlen(argv[2]) + 3];
         sprintf(pipe_name, "../%s", argv[2]);
+        //Check if pipe_name already exists
+        if(access(pipe_name, F_OK) == 0) {
+            fprintf(stderr, "[ERR]: %s pipe_name alreay in use\n",argv[2]);
+            exit(EXIT_FAILURE);
+        }
         //Open register fifo for writing request
         int register_fifo_write = open(register_pipe_name, O_WRONLY);
         if (register_fifo_write == -1){
@@ -39,15 +45,11 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         //Create worker fifo
-        if(access(pipe_name, F_OK) == 0) {
-            if(unlink(pipe_name) == -1) {
-                fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
-            }
-        }
         if (mkfifo(pipe_name, 0640) != 0) {
             fprintf(stderr, "[ERR]: mkfifo failed--\n");
             exit(EXIT_FAILURE);
         }
+        //Create request message serialized buffer and send through pipe
         ListingRequest listing_request;
         char listing_buffer [sizeof(ListingRequest)];
         listing_request.code = 7;
@@ -76,8 +78,8 @@ int main(int argc, char **argv) {
         ListingResponse listing_response;
         char listing_response_buffer[sizeof(ListingResponse)];
         bytes_read = read_fifo(worker_fifo_read, listing_response_buffer, sizeof(ListingResponse));
-        if(bytes_read != 0){
-            while(bytes_read > 0){
+        if(bytes_read != 0){//se ler 0 aqui significa que o mbroker fechou a ponta de escrita sem mandar nada, ou seja nao ha caixas
+            while(bytes_read > 0){//Sai quando mbroker fechar ponta do fifo de escrita
                 offset = 0;
                 memcpy(&listing_response.code, listing_response_buffer, sizeof(listing_response.code));
                 offset += sizeof(listing_response.code);
@@ -93,7 +95,7 @@ int main(int argc, char **argv) {
                 memcpy(&listing_response.n_subscribers  , listing_response_buffer + offset, sizeof(listing_response.n_subscribers));
                 //adicionar informação na lista de boxes para ser ordenada
                 insert_at_beginning(&box_list_sort, listing_response.box_name,listing_response.box_size, listing_response.n_publishers, listing_response.n_subscribers );
-
+                //ler proxima caixa do fifo
                 bytes_read = read_fifo(worker_fifo_read, listing_response_buffer, sizeof(ListingResponse));
             }
             if (bytes_read < 0){//error
@@ -104,18 +106,24 @@ int main(int argc, char **argv) {
 
             //TODO
 
-            //imprimir todos
+            //imprimir todas as caixas
             box_data = box_list_sort.head;
             while(box_data != NULL){
                 fprintf(stdout, "%s %zu %zu %zu\n", box_data->box_name, box_data->box_size, box_data->n_publishers, box_data->n_subscribers);
                 box_data = box_data->next;
             } 
 
-            close(worker_fifo_read); 
+            close(worker_fifo_read);
+            if(unlink(pipe_name) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
+            }
             return 0;
         }
         fprintf(stdout, "NO BOXES FOUND\n");
         close(worker_fifo_read);
+        if(unlink(pipe_name) == -1) {
+            fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
+        }
         return 0;
     }else if(argc == 5){//Ou criar ou remover caixa
         
@@ -126,42 +134,41 @@ int main(int argc, char **argv) {
             code = 5;
         }
         if(code != 0){
+            //Append "../" to the beggining of the names to store worker pipes in a common place
             char register_pipe_name [strlen(argv[1]) + 3];
             sprintf(register_pipe_name, "../%s", argv[1]);
             char pipe_name [strlen(argv[2]) + 3];
             sprintf(pipe_name, "../%s", argv[2]);
-            
+            //Check if pipe_name already exists
+            if(access(pipe_name, F_OK) == 0) {
+                fprintf(stderr, "[ERR]: %s pipe_name alreay in use\n", argv[2]);
+                exit(EXIT_FAILURE);
+            }
             //Open register fifo for writing request
             int register_fifo_write = open(register_pipe_name, O_WRONLY);
             if (register_fifo_write == -1){
                 fprintf(stderr, "[ERR]: open failed\n");
                 exit(EXIT_FAILURE);
             }
-            //Create worker fifo
-            if(access(pipe_name, F_OK) == 0) {
-                if(unlink(pipe_name) == -1) {
-                    fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
-                }
-            }
+            //Create Worker fifo
             if (mkfifo(pipe_name, 0640) != 0) {
                 fprintf(stderr, "[ERR]: mkfifo failed--\n");
                 exit(EXIT_FAILURE);
             }
-            
             //Create request message serialized buffer and send through pipe
             Request request;
             request.code = code;
             strcpy(request.client_named_pipe_path, pipe_name);
             strcpy(request.box_name, argv[4]);
             send_request( request, register_fifo_write);
-            
-            // Open pipe for reading (waits for someone to open it for writing)
+            close(register_fifo_write);
+            //Open worker fifo for reading (waits for someone to open it for writing)
             int worker_fifo_read = open(pipe_name, O_RDONLY);
             if (worker_fifo_read == -1){
                 fprintf(stderr, "[ERR]: open failed\n");
                 exit(EXIT_FAILURE);
             }
-            //ler resposta
+            //Read Response
             Box_Response box_response;
             char response_buffer[sizeof(Box_Response)];
             //read the serialized message
@@ -185,7 +192,9 @@ int main(int argc, char **argv) {
                 printf("UNKNOWN BOX RESPONSE\n");
             }
             close(worker_fifo_read);
-            close(register_fifo_write);
+            if(unlink(pipe_name) == -1) {
+                fprintf(stderr, "[ERR]: unlink(%s) failed\n", pipe_name);
+            }
             return 0;
         }
     }
